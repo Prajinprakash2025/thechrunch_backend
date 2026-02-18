@@ -18,7 +18,7 @@ class ContactCreateView(generics.CreateAPIView):
         return Response(
             {
                 "status": "success",
-                "message": "Thank you! Your message has been sent successfullyyy.",
+                "message": "Thank you! Your message has been sent successfully.",
                 "data": serializer.data
             },
             status=status.HTTP_201_CREATED
