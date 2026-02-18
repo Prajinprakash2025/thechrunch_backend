@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-+h=pfu17(g3se$26n^wtu(gtu47ytk%pmlear53lj!5znsjeb)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -135,7 +135,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Token expires in 1 hour
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=50),  # Token expires in 1 hour
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # User stays logged in for 1 day
 }
 

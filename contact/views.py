@@ -23,3 +23,6 @@ class ContactCreateView(generics.CreateAPIView):
             },
             status=status.HTTP_201_CREATED
         )
+    
+def home(request):
+    return Response({"message": "Welcome to the Contact API!"})
