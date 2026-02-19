@@ -149,3 +149,50 @@ class VerifyOTPView(APIView):
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         }, status=status.HTTP_200_OK)
+
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth import get_user_model
+from rest_framework.permissions import IsAuthenticated
+from .permissions import IsOwner   # or IsSuperAdmin
+
+User = get_user_model()
+
+
+class CreateEmployeeView(APIView):
+
+    permission_classes = [IsAuthenticated, IsOwner]
+
+    def post(self, request):
+
+        username = request.data.get("username")
+        password = request.data.get("password")
+        phone_number = request.data.get("phone_number")
+
+        if not username or not password:
+            return Response(
+                {"error": "Username and password required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {"error": "Username already exists"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            phone_number=phone_number,
+            role="employee"
+        )
+
+        return Response({
+            "status": True,
+            "message": "Employee created successfully",
+            "username": user.username
+        }, status=status.HTTP_201_CREATED)
