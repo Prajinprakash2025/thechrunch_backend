@@ -1,11 +1,10 @@
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-
 from .serializers import ContactMessageSerializer
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import ContactMessage
 from .serializers import ContactMessageSerializer
+from .permissions import IsSuperAdmin
+
 
 
 class ContactCreateView(generics.CreateAPIView):
@@ -30,10 +29,6 @@ class ContactCreateView(generics.CreateAPIView):
         )
 
 
-from rest_framework import generics
-from .models import ContactMessage
-from .serializers import ContactMessageSerializer
-from .permissions import IsSuperAdmin
 
 
 class AdminContactListView(generics.ListAPIView):
