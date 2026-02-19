@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     # Your apps
     'contact',
     "accounts",
+    "bookings",
 ]
 
 MIDDLEWARE = [
@@ -113,8 +114,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
-
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 
 USE_TZ = True
@@ -153,4 +153,6 @@ AUTH_USER_MODEL = "accounts.User"
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://foo-d-elivery.netlify.app",
+
 ]
