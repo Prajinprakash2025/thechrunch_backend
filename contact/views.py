@@ -1,28 +1,54 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+
 from .models import ContactMessage
+from .serializers import ContactMessageSerializer
+
 
 class ContactCreateView(generics.CreateAPIView):
+
     queryset = ContactMessage.objects.all()
-    permission_classes = [permissions.AllowAny] # Public access
+    serializer_class = ContactMessageSerializer
+    permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
-        # 1. Validate the data
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        # 2. Save to database
-        self.perform_create(serializer)
-        
-        # 3. Return a nice success message
+
+        # Let DRF handle validation + save
+        response = super().create(request, *args, **kwargs)
+
+        # Wrap response in standardized format
         return Response(
             {
-                "status": "success",
-                "message": "Thank you! Your message has been sent successfullyyy.",
-                "data": serializer.data
+                "status": True,
+                "message": "Thank you. Your message has been sent successfully.",
+                "data": response.data,
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
-    
-def home(request):
-    return Response({"message": "Welcome to the Contact API!"})
+
+
+from rest_framework import generics
+from .models import ContactMessage
+from .serializers import ContactMessageSerializer
+from .permissions import IsSuperAdmin
+
+
+class AdminContactListView(generics.ListAPIView):
+
+    queryset = ContactMessage.objects.all().order_by("-created_at")
+    serializer_class = ContactMessageSerializer
+    permission_classes = [IsSuperAdmin]
+
+
+class AdminContactDetailView(generics.RetrieveAPIView):
+
+    queryset = ContactMessage.objects.all()
+    serializer_class = ContactMessageSerializer
+    permission_classes = [IsSuperAdmin]
+
+
+class AdminContactDeleteView(generics.DestroyAPIView):
+
+    queryset = ContactMessage.objects.all()
+    serializer_class = ContactMessageSerializer
+    permission_classes = [IsSuperAdmin]
