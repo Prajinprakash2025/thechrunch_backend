@@ -1,34 +1,40 @@
 from rest_framework import serializers
+from django.contrib.auth import authenticate
 
 
+# -------------------------------
+# Password Login Serializer
+# -------------------------------
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+
+        user = authenticate(
+            username=data["username"],
+            password=data["password"]
+        )
+
+        if not user:
+            raise serializers.ValidationError(
+                {"error": "Invalid username or password"}
+            )
+
+        data["user"] = user
+        return data
+
+
+# -------------------------------
+# Send OTP Serializer
+# -------------------------------
 class SendOTPSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
 
 
+# -------------------------------
+# Verify OTP Serializer
+# -------------------------------
 class VerifyOTPSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
     otp = serializers.CharField(max_length=6)
-from rest_framework import serializers
-
-
-class UnifiedLoginSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(required=False)
-    otp = serializers.CharField(required=False)
-    username = serializers.CharField(required=False)
-    password = serializers.CharField(required=False)
-
-    def validate(self, data):
-
-        # Case 1: Username + password login
-        if data.get("username") and data.get("password"):
-            return data
-
-        # Case 2: Phone OTP send
-        if data.get("phone_number") and not data.get("otp"):
-            return data
-
-        # Case 3: Phone OTP verify
-        if data.get("phone_number") and data.get("otp"):
-            return data
-
-        raise serializers.ValidationError("Invalid login request")

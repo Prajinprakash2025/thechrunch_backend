@@ -1,107 +1,136 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.contrib.auth import authenticate, get_user_model
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate
+
 from rest_framework_simplejwt.tokens import RefreshToken
+
 from .models import PhoneOTP
-from .serializers import UnifiedLoginSerializer
+from .serializers import (
+    LoginSerializer,
+    SendOTPSerializer,
+    VerifyOTPSerializer
+)
 
 User = get_user_model()
 
 
-class UnifiedLoginView(APIView):
+# ============================================================
+# 1️⃣ PASSWORD LOGIN
+# Superadmin / Owner / Employee
+# ============================================================
+class LoginView(APIView):
 
     def post(self, request):
 
-        serializer = UnifiedLoginSerializer(data=request.data)
+        serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
-        # =========================
-        # 1️⃣ Username + Password
-        # =========================
-        if data.get("username") and data.get("password"):
+        user = serializer.validated_data["user"]
 
-            user = authenticate(
-                username=data["username"],
-                password=data["password"]
-            )
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
 
-            if not user:
-                return Response(
-                    {"error": "Invalid credentials"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            refresh = RefreshToken.for_user(user)
-
-            return Response({
-                "role": user.role,
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
-            })
+        return Response({
+            "status": True,
+            "message": "Login successful",
+            "role": user.role if hasattr(user, "role") else "superadmin",
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }, status=status.HTTP_200_OK)
 
 
-        # =========================
-        # 2️⃣ Send OTP
-        # =========================
-        if data.get("phone_number") and not data.get("otp"):
+# ============================================================
+# 2️⃣ SEND OTP
+# Customer login start
+# ============================================================
+class SendOTPView(APIView):
 
-            phone = data["phone_number"]
+    def post(self, request):
 
-            otp_obj, _ = PhoneOTP.objects.get_or_create(
-                phone_number=phone
-            )
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-            otp_obj.generate_otp()
-            otp_obj.is_verified = False
-            otp_obj.save()
+        phone = serializer.validated_data["phone_number"]
 
-            return Response({
-                "message": "OTP sent",
-                "otp": otp_obj.otp  # REMOVE IN PRODUCTION
-            })
+        # Delete old OTP records
+        PhoneOTP.objects.filter(phone_number=phone).delete()
+
+        # Create new OTP
+        otp_obj = PhoneOTP.objects.create(phone_number=phone)
+        otp_obj.generate_otp()
+        otp_obj.save()
+
+        print(f"OTP for {phone}: {otp_obj.otp}")
+
+        return Response({
+            "status": True,
+            "message": "OTP sent successfully",
+
+            # ⚠️ REMOVE THIS IN PRODUCTION
+            "otp": otp_obj.otp
+        }, status=status.HTTP_200_OK)
 
 
-        # =========================
-        # 3️⃣ Verify OTP
-        # =========================
-        if data.get("phone_number") and data.get("otp"):
+# ============================================================
+# 3️⃣ VERIFY OTP
+# Customer login complete
+# ============================================================
+class VerifyOTPView(APIView):
 
-            phone = data["phone_number"]
-            otp = data["otp"]
+    def post(self, request):
 
-            try:
-                otp_obj = PhoneOTP.objects.get(
-                    phone_number=phone,
-                    otp=otp
-                )
-            except PhoneOTP.DoesNotExist:
-                return Response(
-                    {"error": "Invalid OTP"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        serializer = VerifyOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-            if otp_obj.is_expired():
-                return Response(
-                    {"error": "OTP expired"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        phone = serializer.validated_data["phone_number"]
+        otp = serializer.validated_data["otp"]
 
-            user, _ = User.objects.get_or_create(
+        # Check OTP record
+        try:
+            otp_obj = PhoneOTP.objects.get(
                 phone_number=phone,
-                defaults={
-                    "username": phone,
-                    "role": "customer"
-                }
+                otp=otp
+            )
+        except PhoneOTP.DoesNotExist:
+            return Response(
+                {"error": "Invalid OTP"},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-            refresh = RefreshToken.for_user(user)
-
+        # Check expiry
+        if otp_obj.is_expired():
             otp_obj.delete()
+            return Response(
+                {"error": "OTP expired"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-            return Response({
-                "role": user.role,
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
-            })
+        # Mark verified
+        otp_obj.is_verified = True
+        otp_obj.save()
+
+        # Create customer if not exists
+        user, created = User.objects.get_or_create(
+            phone_number=phone,
+            defaults={
+                "username": phone,
+                "role": "customer"
+            }
+        )
+
+        # Generate JWT
+        refresh = RefreshToken.for_user(user)
+
+        # Delete OTP after use
+        otp_obj.delete()
+
+        return Response({
+            "status": True,
+            "message": "Login successful",
+            "role": user.role,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }, status=status.HTTP_200_OK)
