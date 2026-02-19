@@ -55,3 +55,6 @@ class AdminContactDeleteView(generics.DestroyAPIView):
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
     permission_classes = [IsSuperAdmin]
+
+
+
