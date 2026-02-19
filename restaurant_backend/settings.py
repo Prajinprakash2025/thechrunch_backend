@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     
     # Your apps
     'contact',
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -138,6 +139,9 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=50),  # Token expires in 1 hour
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # User stays logged in for 1 day
 }
+
+
+AUTH_USER_MODEL = "accounts.User"
 
 
 
