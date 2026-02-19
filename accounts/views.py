@@ -25,6 +25,7 @@ class LoginView(APIView):
 
     def post(self, request):
 
+        # Validate request data
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -33,14 +34,28 @@ class LoginView(APIView):
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
 
+        # --------------------------------------------------
+        # Resolve Role Properly
+        # --------------------------------------------------
+        if user.is_superuser:
+            role = "superadmin"
+
+        elif user.role:
+            role = user.role
+
+        else:
+            role = "unknown"
+
+        # --------------------------------------------------
+        # Response
+        # --------------------------------------------------
         return Response({
             "status": True,
             "message": "Login successful",
-            "role": user.role if hasattr(user, "role") else "superadmin",
+            "role": role,
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         }, status=status.HTTP_200_OK)
-
 
 # ============================================================
 # 2️⃣ SEND OTP
