@@ -22,7 +22,7 @@ class ContactCreateView(generics.CreateAPIView):
         return Response(
             {
                 "status": True,
-                "message": "Thank you. Your message has been sent successfully.",
+                "message": "Your message has been sent successfully.",
                 "data": response.data,
             },
             status=status.HTTP_201_CREATED,
