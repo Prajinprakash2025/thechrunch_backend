@@ -1,6 +1,9 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 
+from .serializers import ContactMessageSerializer
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
 from .models import ContactMessage
 from .serializers import ContactMessageSerializer
 
@@ -9,7 +12,7 @@ class ContactCreateView(generics.CreateAPIView):
 
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.AllowAny]  # Public access
 
     def create(self, request, *args, **kwargs):
 
