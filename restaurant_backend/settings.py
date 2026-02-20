@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'contact',
     "accounts",
     "bookings",
+    "inventory",
 ]
 
 MIDDLEWARE = [

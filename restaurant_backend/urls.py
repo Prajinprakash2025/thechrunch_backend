@@ -13,5 +13,6 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # Login
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # Refresh Token
 
-    path('api/bookings/',include('bookings.urls'),)
+    path('api/bookings/',include('bookings.urls'),),
+    path('api/inventory/',include('inventory.urls'),)
 ]
