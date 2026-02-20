@@ -5,6 +5,9 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from django.conf import settings
+from django.conf.urls.static import static
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('contact.urls')),
@@ -14,5 +17,8 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # Refresh Token
 
     path('api/bookings/',include('bookings.urls'),),
-    path('api/inventory/',include('inventory.urls'),)
+    path('api/inventory/',include('inventory.urls'),),
+    path('api/banners/',include('banners.urls')),
 ]
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
