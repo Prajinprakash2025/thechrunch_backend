@@ -24,4 +24,4 @@ urlpatterns = [
     
     # GET: View one / PUT: Edit / DELETE: Remove
     path('menu-items/<int:pk>/', MenuItemDetailView.as_view(), name='menu-item-detail'),
-]
+]   
