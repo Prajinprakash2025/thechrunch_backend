@@ -1,31 +1,50 @@
-from rest_framework import generics, permissions, status
+from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+
 from .models import TableBooking
-from .serializers import TableBookingSerializer 
+from .serializers import TableBookingSerializer
+from accounts.permissions import IsAdminOrStaff 
 
-class BookingCreateView(generics.ListCreateAPIView):
-    queryset = TableBooking.objects.all()
-    serializer_class = TableBookingSerializer 
+# ============================================================
+# 1️⃣ CREATE BOOKING
+# public access 
+# ============================================================
+class CreateBookingView(APIView):
+    permission_classes = [AllowAny]
 
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            # Allow anyone to book a table
-            return [permissions.AllowAny()]
-        elif self.request.method == 'GET':
-            # Only allow admin and superadmin to view the bookings
-            return [permissions.IsAdminUser()]
-        return super().get_permissions()
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+    def post(self, request):
+        serializer = TableBookingSerializer(data=request.data)
         
-        return Response(
-            {
-                "status": "success",
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": True,
                 "message": "Your table has been booked successfully!",
                 "data": serializer.data
-            },
-            status=status.HTTP_201_CREATED
-        )
+            }, status=status.HTTP_201_CREATED)
+            
+        return Response({
+            "status": False,
+            "message": "Booking failed. Please check the details.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ============================================================
+# 2️⃣ LIST BOOKINGS
+# Can only see admin and staff (Protected)
+# ============================================================
+class ListBookingsView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrStaff]
+
+    def get(self, request):
+        bookings = TableBooking.objects.all().order_by('-created_at')
+        serializer = TableBookingSerializer(bookings, many=True)
+        
+        return Response({
+            "status": True,
+            "message": "Bookings retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
