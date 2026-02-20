@@ -10,16 +10,16 @@ import random
 class User(AbstractUser):
     """
     Custom User Model supporting:
-    - Superadmin
-    - Owner
-    - Employee
-    - Customer
+    - Superadmin (Django's default)
+    - Admin (Replaces Owner)
+    - Staff (Replaces Employee)
+    - User (Replaces Customer)
     """
 
     ROLE_CHOICES = (
-        ("owner", "Owner"),
-        ("employee", "Employee"),
-        ("customer", "Customer"),
+        ("admin", "Admin"),
+        ("staff", "Staff"),
+        ("user", "User"),
     )
 
     role = models.CharField(
@@ -43,10 +43,9 @@ class User(AbstractUser):
         return f"{self.username} - {self.role if self.role else 'superadmin'}"
 
 
-
 class PhoneOTP(models.Model):
     """
-    Handles OTP authentication for customers
+    Handles OTP authentication for users
     """
 
     phone_number = models.CharField(max_length=15)

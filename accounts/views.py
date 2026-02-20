@@ -1,10 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
 from django.contrib.auth import get_user_model
-from django.contrib.auth import authenticate
-
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import PhoneOTP
@@ -13,18 +11,19 @@ from .serializers import (
     SendOTPSerializer,
     VerifyOTPSerializer
 )
+from .permissions import IsAdminUser   # <-- Updated from IsOwner
 
 User = get_user_model()
 
 
 # ============================================================
 # 1️⃣ PASSWORD LOGIN
-# Superadmin / Owner / Employee
+# Superadmin / Admin / Staff
 # ============================================================
 class LoginView(APIView):
+    permission_classes = [AllowAny] # Ensures anyone can access the login page
 
     def post(self, request):
-
         # Validate request data
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -37,12 +36,10 @@ class LoginView(APIView):
         # --------------------------------------------------
         # Resolve Role Properly
         # --------------------------------------------------
-        if user.is_superuser:
-            role = "superadmin"
-
+        if user.is_superuser and not user.role:
+            role = "admin" # Default superusers to admin for the frontend
         elif user.role:
             role = user.role
-
         else:
             role = "unknown"
 
@@ -57,14 +54,15 @@ class LoginView(APIView):
             "access": str(refresh.access_token),
         }, status=status.HTTP_200_OK)
 
+
 # ============================================================
 # 2️⃣ SEND OTP
-# Customer login start
+# User login start
 # ============================================================
 class SendOTPView(APIView):
+    permission_classes = [AllowAny]
 
     def post(self, request):
-
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -83,7 +81,6 @@ class SendOTPView(APIView):
         return Response({
             "status": True,
             "message": "OTP sent successfully",
-
             # ⚠️ REMOVE THIS IN PRODUCTION
             "otp": otp_obj.otp
         }, status=status.HTTP_200_OK)
@@ -91,12 +88,12 @@ class SendOTPView(APIView):
 
 # ============================================================
 # 3️⃣ VERIFY OTP
-# Customer login complete
+# User login complete
 # ============================================================
 class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
 
     def post(self, request):
-
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -111,7 +108,7 @@ class VerifyOTPView(APIView):
             )
         except PhoneOTP.DoesNotExist:
             return Response(
-                {"error": "Invalid OTP"},
+                {"status": False, "message": "Invalid OTP"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -119,7 +116,7 @@ class VerifyOTPView(APIView):
         if otp_obj.is_expired():
             otp_obj.delete()
             return Response(
-                {"error": "OTP expired"},
+                {"status": False, "message": "OTP expired. Please request a new one."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -127,12 +124,12 @@ class VerifyOTPView(APIView):
         otp_obj.is_verified = True
         otp_obj.save()
 
-        # Create customer if not exists
+        # Create user if not exists
         user, created = User.objects.get_or_create(
             phone_number=phone,
             defaults={
                 "username": phone,
-                "role": "customer"
+                "role": "user"   # <-- CHANGED FROM "customer" TO "user"
             }
         )
 
@@ -151,36 +148,29 @@ class VerifyOTPView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+# ============================================================
+# 4️⃣ CREATE STAFF 
+# Admin Only
+# ============================================================
+class CreateStaffView(APIView): # <-- Renamed to match your new roles
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth import get_user_model
-from rest_framework.permissions import IsAuthenticated
-from .permissions import IsOwner   # or IsSuperAdmin
-
-User = get_user_model()
-
-
-class CreateEmployeeView(APIView):
-
-    permission_classes = [IsAuthenticated, IsOwner]
+    # <-- CHANGED permission from IsOwner to IsAdminUser
+    permission_classes = [IsAuthenticated, IsAdminUser] 
 
     def post(self, request):
-
         username = request.data.get("username")
         password = request.data.get("password")
         phone_number = request.data.get("phone_number")
 
         if not username or not password:
             return Response(
-                {"error": "Username and password required"},
+                {"status": False, "message": "Username and password required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         if User.objects.filter(username=username).exists():
             return Response(
-                {"error": "Username already exists"},
+                {"status": False, "message": "Username already exists"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -188,11 +178,11 @@ class CreateEmployeeView(APIView):
             username=username,
             password=password,
             phone_number=phone_number,
-            role="employee"
+            role="staff"    # <-- CHANGED FROM "employee" TO "staff"
         )
 
         return Response({
             "status": True,
-            "message": "Employee created successfully",
+            "message": "Staff account created successfully",
             "username": user.username
         }, status=status.HTTP_201_CREATED)
