@@ -2,7 +2,9 @@ from rest_framework import generics
 from rest_framework.permissions import AllowAny
 from .models import Category, MenuItem
 from .serializers import CategorySerializer, MenuItemSerializer
-from .permissions import IsOwner # Importing your updated custom permission
+
+# IMPORTANT: Import the updated permission from your accounts app!
+from accounts.permissions import IsAdminUser 
 
 # ==========================================
 # CATEGORY VIEWS
@@ -11,7 +13,7 @@ from .permissions import IsOwner # Importing your updated custom permission
 class CategoryListCreateView(generics.ListCreateAPIView):
     """
     GET: List all categories (Public)
-    POST: Create a new category (Owner/Superadmin only)
+    POST: Create a new category (Admin/Superadmin only)
     """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
@@ -19,13 +21,13 @@ class CategoryListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsOwner()]
+        return [IsAdminUser()]
 
 class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     GET: Retrieve a specific category (Public)
-    PUT/PATCH: Update a category (Owner/Superadmin only)
-    DELETE: Delete a category (Owner/Superadmin only)
+    PUT/PATCH: Update a category (Admin/Superadmin only)
+    DELETE: Delete a category (Admin/Superadmin only)
     """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
@@ -33,7 +35,7 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsOwner()]
+        return [IsAdminUser()]
 
 
 # ==========================================
@@ -43,7 +45,7 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 class MenuItemListCreateView(generics.ListCreateAPIView):
     """
     GET: List all menu items (Public)
-    POST: Create a new menu item (Owner/Superadmin only)
+    POST: Create a new menu item (Admin/Superadmin only)
     """
     queryset = MenuItem.objects.all().order_by('-created_at')
     serializer_class = MenuItemSerializer
@@ -51,13 +53,13 @@ class MenuItemListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsOwner()] 
+        return [IsAdminUser()] 
 
 class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     GET: Retrieve a specific menu item (Public)
-    PUT/PATCH: Update a menu item (Owner/Superadmin only)
-    DELETE: Delete a menu item (Owner/Superadmin only)
+    PUT/PATCH: Update a menu item (Admin/Superadmin only)
+    DELETE: Delete a menu item (Admin/Superadmin only)
     """
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemSerializer
@@ -65,4 +67,4 @@ class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsOwner()]
+        return [IsAdminUser()]

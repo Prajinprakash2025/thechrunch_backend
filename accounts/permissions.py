@@ -1,24 +1,21 @@
 from rest_framework.permissions import BasePermission
 
-
 class IsSuperAdmin(BasePermission):
-
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.is_superuser
-    
+        return bool(request.user.is_authenticated and request.user.is_superuser)
 
-class IsOwner(BasePermission):
-
+class IsAdminUser(BasePermission):
     def has_permission(self, request, view):
-        return (
+        # Allow if they have the 'admin' role OR if they are a superuser
+        return bool(
             request.user.is_authenticated and
-            request.user.role == "owner"
+            (request.user.role == "admin" or request.user.is_superuser)
         )
     
-class IsOwnerOrEmployee(BasePermission):
-
+class IsAdminOrStaff(BasePermission):
     def has_permission(self, request, view):
-        return (
+        # Allow if they are an admin, staff, OR a superuser
+        return bool(
             request.user.is_authenticated and
-            request.user.role in ["owner", "employee"]
+            (request.user.role in ["admin", "staff"] or request.user.is_superuser)
         )
