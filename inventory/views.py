@@ -2,6 +2,8 @@ from rest_framework import generics
 from rest_framework.permissions import AllowAny
 from .models import Category, MenuItem
 from .serializers import CategorySerializer, MenuItemSerializer
+from rest_framework.response import Response
+from rest_framework import status
 
 # IMPORTANT: Import the updated permission from your accounts app!
 from accounts.permissions import IsAdminUser 
@@ -36,6 +38,30 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method == 'GET':
             return [AllowAny()]
         return [IsAdminUser()]
+
+    # 1️⃣ EDIT (PUT/PATCH) 
+    def update(self, request, *args, **kwargs):
+        # Default update calling function
+        response = super().update(request, *args, **kwargs)
+        
+        return Response({
+            "status": True,
+            "message": "Category updated successfully!",
+            "data": response.data
+        }, status=status.HTTP_200_OK)
+
+    # 2️⃣ DELETE 
+    def destroy(self, request, *args, **kwargs):
+        # any category finding
+        instance = self.get_object()
+        
+        # deleting the category
+        self.perform_destroy(instance)
+        
+        return Response({
+            "status": True,
+            "message": "Category deleted successfully!"
+        }, status=status.HTTP_200_OK)
 
 
 # ==========================================
