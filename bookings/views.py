@@ -2,10 +2,16 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-
 from .models import TableBooking
 from .serializers import TableBookingSerializer
 from accounts.permissions import IsAdminOrStaff 
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q
+
+class BookingPagination(PageNumberPagination):
+    page_size = 8  # Oru thavana 8 data mathram
+    page_size_query_param = 'page_size'
+    max_page_size = 50
 
 # ============================================================
 # 1️⃣ CREATE BOOKING
@@ -41,10 +47,31 @@ class ListBookingsView(APIView):
 
     def get(self, request):
         bookings = TableBooking.objects.all().order_by('-created_at')
-        serializer = TableBookingSerializer(bookings, many=True)
         
+        search_query = request.query_params.get('search', '')
+        
+        if search_query:
+            bookings = bookings.filter(
+                Q(full_name__icontains=search_query) |
+                Q(phone__icontains=search_query) |
+                Q(email__icontains=search_query)
+            )
+
+        # 3. Pagination Apply 
+        paginator = BookingPagination()
+        paginated_bookings = paginator.paginate_queryset(bookings, request, view=self)
+        
+        serializer = TableBookingSerializer(paginated_bookings, many=True)
+        
+        # 5. Frontend-nu avashyamulla ella details-um response aayi kodukkuka
         return Response({
             "status": True,
             "message": "Bookings retrieved successfully",
-            "data": serializer.data
+            "total_items": paginator.page.paginator.count,   # Aake ethra bookings und
+            "total_pages": paginator.page.paginator.num_pages, # Aake ethra pages und
+            "current_page": paginator.page.number,           # Ippol ethamathe page aanu
+            "next_page_url": paginator.get_next_link(),      # Adutha 8 data edukkanulla URL
+            "data": serializer.data                          # Ee page-le 8 data
         }, status=status.HTTP_200_OK)
+    
+
