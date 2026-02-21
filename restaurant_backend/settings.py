@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',  # JWT support
     'corsheaders',               # For React frontend
+    'rest_framework_simplejwt.token_blacklist',  # <-- ഇവിടെയാണ് ഇത് നൽകേണ്ടത്!
     
     # Your apps
     'contact',

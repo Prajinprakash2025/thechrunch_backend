@@ -186,3 +186,21 @@ class CreateStaffView(APIView): # <-- Renamed to match your new roles
             "message": "Staff account created successfully",
             "username": user.username
         }, status=status.HTTP_201_CREATED)
+
+
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+
+class LogoutView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh"]
+            token = RefreshToken(refresh_token)
+            token.blacklist() # ടോക്കൺ ബ്ലാക്ക്‌ലിസ്റ്റ് ചെയ്യുന്നു
+            return Response({"message": "Successfully logged out"}, status=205)
+        except Exception as e:
+            return Response(status=400)
