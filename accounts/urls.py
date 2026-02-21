@@ -8,7 +8,7 @@ urlpatterns = [
     # OTP login
     path("send-otp/", SendOTPView.as_view(), name="send-otp"),
     path("verify-otp/", VerifyOTPView.as_view(), name="verify-otp"),
-    path("auth/verify-session/", VerifySessionView.as_view()),
+    path("verify-session/", VerifySessionView.as_view()),
 
 
     # Admin creating a new staff account
