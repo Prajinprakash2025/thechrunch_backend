@@ -5,6 +5,7 @@ from .views import (
     AdminContactListView,
     AdminContactDetailView,
     AdminContactDeleteView,
+    AdminContactReplyView,
 )
 
 urlpatterns = [
@@ -16,4 +17,5 @@ urlpatterns = [
     path("admin/contacts/", AdminContactListView.as_view()),
     path("admin/contacts/<int:pk>/", AdminContactDetailView.as_view()),
     path("admin/contacts/<int:pk>/delete/", AdminContactDeleteView.as_view()),
+    path("admin/contacts/<int:pk>/reply/", AdminContactReplyView.as_view()),
 ]
