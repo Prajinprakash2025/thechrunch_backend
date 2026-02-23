@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='menuitem',
             name='actual_price',
-            field=models.DecimalField(decimal_places=2, default='default', max_digits=10, verbose_name='Actual ₹'),
+            field=models.DecimalField(decimal_places=2, default='0.00', max_digits=10, verbose_name='Actual ₹'),
             preserve_default=False,
         ),
         migrations.AddField(
