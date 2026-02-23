@@ -1,27 +1,22 @@
 from django.urls import path
-from .views import (
-    CategoryListCreateView, 
-    CategoryDetailView,
-    MenuItemListCreateView,
-    MenuItemDetailView
-)
+from . import views
 
 urlpatterns = [
-    # ==========================================
-    # CATEGORY ENDPOINTS
-    # ==========================================
-    # GET: List all / POST: Add new
-    path('categories/', CategoryListCreateView.as_view(), name='category-list'),
-    
-    # GET: View one / PUT: Edit / DELETE: Remove
-    path('categories/<int:pk>/', CategoryDetailView.as_view(), name='category-detail'),
+    # --- CATEGORY URLS ---
+    path('categories/', views.CategoryListCreateView.as_view(), name='category-list'),
+    path('categories/<int:pk>/', views.CategoryDetailView.as_view(), name='category-detail'),
 
-    # ==========================================
-    # MENU ITEM ENDPOINTS
-    # ==========================================
-    # GET: List all / POST: Add new
-    path('menu-items/', MenuItemListCreateView.as_view(), name='menu-item-list'),
+    # --- SECTION URLS ---
+    path('sections/', views.SectionListCreateView.as_view(), name='section-list'),
+    path('sections/<int:pk>/', views.SectionDetailView.as_view(), name='section-detail'),
+
+    # --- MENU ITEM URLS ---
+    # Public Endpoint (List only, no pagination)
+    path('public/menu-items/', views.PublicMenuItemListView.as_view(), name='public-menu-list'),
     
-    # GET: View one / PUT: Edit / DELETE: Remove
-    path('menu-items/<int:pk>/', MenuItemDetailView.as_view(), name='menu-item-detail'),
-]   
+    # Admin Endpoint (List & Create, with pagination)
+    path('admin/menu-items/', views.AdminMenuItemListCreateView.as_view(), name='admin-menu-list'),
+    
+    # Detail Endpoint (GET is public, PUT/PATCH/DELETE is Admin)
+    path('menu-items/<int:pk>/', views.MenuItemDetailView.as_view(), name='menu-item-detail'),
+]
