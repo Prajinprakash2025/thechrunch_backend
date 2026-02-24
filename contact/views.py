@@ -3,11 +3,13 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import ContactMessage
 from .serializers import ContactMessageSerializer
-from .permissions import IsSuperAdmin
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from accounts.permissions import IsAdminOrStaff 
+from accounts.permissions import IsSuperAdmin 
+
 
 
 
@@ -39,14 +41,14 @@ class AdminContactListView(generics.ListAPIView):
 
     queryset = ContactMessage.objects.all().order_by("-created_at")
     serializer_class = ContactMessageSerializer
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsAdminOrStaff]
 
 
 class AdminContactDetailView(generics.RetrieveAPIView):
 
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsAdminOrStaff]
 
 
 class AdminContactDeleteView(generics.DestroyAPIView):
