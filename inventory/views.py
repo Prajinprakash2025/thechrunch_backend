@@ -2,6 +2,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q  # <-- Added for native search filtering
 
 from accounts.permissions import IsAdminUser 
 from .models import Category, MenuItem
@@ -57,17 +58,69 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 # MENU ITEM VIEWS 
 # ==========================================
 
+from rest_framework import generics
+from django.db.models import Q
+from .models import MenuItem
+from .serializers import MenuItemSerializer
+
 class PublicMenuItemListView(generics.ListAPIView):
-    queryset = MenuItem.objects.filter(is_available=True).order_by('-created_at') 
     serializer_class = MenuItemSerializer
-    permission_classes = [AllowAny] 
     pagination_class = None 
 
+    def get_queryset(self):
+        # 1. Start with all available items
+        queryset = MenuItem.objects.filter(is_available=True).order_by('-created_at')
+        
+        # 2. Read the Query Parameters (?search=...&category=...)
+        search_query = self.request.query_params.get('search', '')
+        category_id = self.request.query_params.get('category', '')
+        section_name = self.request.query_params.get('section', '')
+        
+        # 3. Apply the filters safely
+        if search_query:
+            queryset = queryset.filter(
+                Q(name__icontains=search_query) | 
+                Q(description__icontains=search_query)
+            )
+            
+        if category_id and str(category_id).upper() != 'ALL':
+            queryset = queryset.filter(category_id=category_id)
+            
+        if section_name and str(section_name).upper() != 'ALL':
+            queryset = queryset.filter(section__iexact=section_name)
+            
+        return queryset
+
 class AdminMenuItemListCreateView(generics.ListCreateAPIView):
-    queryset = MenuItem.objects.all().order_by('-created_at')
     serializer_class = MenuItemSerializer
     permission_classes = [IsAdminUser] 
     pagination_class = AdminPagination 
+
+    def get_queryset(self):
+        # 1. Start with ALL items (including unavailable ones for the admin)
+        queryset = MenuItem.objects.all().order_by('-created_at')
+        
+        # 2. Get the parameters from the frontend URL
+        search_query = self.request.query_params.get('search', '')
+        category_id = self.request.query_params.get('category', '')
+        section_name = self.request.query_params.get('section', '')
+        
+        # 3. Apply Text Search
+        if search_query:
+            queryset = queryset.filter(
+                Q(name__icontains=search_query) | 
+                Q(description__icontains=search_query)
+            )
+            
+        # 4. Apply Category Filter
+        if category_id and str(category_id).upper() != 'ALL':
+            queryset = queryset.filter(category_id=category_id)
+            
+        # 5. Apply Section Filter
+        if section_name and str(section_name).upper() != 'ALL':
+            queryset = queryset.filter(section__iexact=section_name)
+            
+        return queryset
 
 class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MenuItem.objects.all()
