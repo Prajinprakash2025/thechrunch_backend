@@ -54,6 +54,19 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
         }, status=status.HTTP_200_OK)
 
 
+
+
+class PublicCategoryListView(generics.ListAPIView):
+    """
+    Public API to fetch all categories without pagination.
+    Perfect for frontend filters and dropdown menus.
+    """
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [AllowAny]
+    pagination_class = None  # Disables pagination so the frontend gets the full list
+
+
 # ==========================================
 # MENU ITEM VIEWS 
 # ==========================================
