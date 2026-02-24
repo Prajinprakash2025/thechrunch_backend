@@ -2,9 +2,12 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Q  # <-- Added for native search filtering
+from django.db.models import Q  
 
-from accounts.permissions import IsAdminUser 
+# --- UPDATED IMPORT ---
+# We are now importing IsAdminOrStaff from your custom permissions
+from accounts.permissions import IsAdminOrStaff 
+
 from .models import Category, MenuItem
 from .serializers import CategorySerializer, MenuItemSerializer
 
@@ -26,7 +29,7 @@ class CategoryListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsAdminUser()]
+        return [IsAdminOrStaff()]  # <-- Updated to allow staff
 
 class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Category.objects.all()
@@ -35,7 +38,7 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsAdminUser()]
+        return [IsAdminOrStaff()]  # <-- Updated to allow staff
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
@@ -53,9 +56,6 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
             "message": "Category deleted successfully!"
         }, status=status.HTTP_200_OK)
 
-
-
-
 class PublicCategoryListView(generics.ListAPIView):
     """
     Public API to fetch all categories without pagination.
@@ -64,18 +64,12 @@ class PublicCategoryListView(generics.ListAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
-    pagination_class = None  # Disables pagination so the frontend gets the full list
+    pagination_class = None  
 
 
 # ==========================================
 # MENU ITEM VIEWS 
 # ==========================================
-
-from rest_framework import generics
-from django.db.models import Q
-from .models import MenuItem
-from .serializers import MenuItemSerializer
-
 class PublicMenuItemListView(generics.ListAPIView):
     serializer_class = MenuItemSerializer
     pagination_class = None 
@@ -106,7 +100,7 @@ class PublicMenuItemListView(generics.ListAPIView):
 
 class AdminMenuItemListCreateView(generics.ListCreateAPIView):
     serializer_class = MenuItemSerializer
-    permission_classes = [IsAdminUser] 
+    permission_classes = [IsAdminOrStaff]  # <-- Updated to allow staff
     pagination_class = AdminPagination 
 
     def get_queryset(self):
@@ -142,7 +136,7 @@ class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsAdminUser()]
+        return [IsAdminOrStaff()]  # <-- Updated to allow staff
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
