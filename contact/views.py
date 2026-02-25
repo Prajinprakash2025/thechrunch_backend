@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.pagination import PageNumberPagination
-
+from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from django.shortcuts import get_object_or_404
@@ -117,7 +117,9 @@ class AdminContactReplyView(APIView):
                 [contact_message.email], 
                 fail_silently=False
             )
-            
+            contact_message.reply_message = reply_text
+            contact_message.replied_at = timezone.now()
+            contact_message.save()
             return Response({
                 "status": True,
                 "message": f"Reply sent successfully to {contact_message.email}!"

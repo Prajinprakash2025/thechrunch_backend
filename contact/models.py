@@ -9,6 +9,8 @@ class ContactMessage(models.Model):
     subject = models.CharField(max_length=200)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)  # To track when the message was sent
+    reply_message = models.TextField(blank=True, null=True)
+    replied_at = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.subject} - {self.full_name}"
