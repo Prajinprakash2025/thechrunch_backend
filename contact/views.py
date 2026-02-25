@@ -93,7 +93,7 @@ class AdminContactDeleteView(generics.DestroyAPIView):
 # 5️⃣ ADMIN EMAIL REPLY VIEW
 # ============================================================
 class AdminContactReplyView(APIView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsAdminOrStaff]
 
     def post(self, request, pk):
         contact_message = get_object_or_404(ContactMessage, pk=pk)
