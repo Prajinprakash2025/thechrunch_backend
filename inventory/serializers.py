@@ -23,6 +23,11 @@ class MenuItemSerializer(serializers.ModelSerializer):
         # You can define limits for any section here
         SECTION_LIMITS = {
             'BEST SELLER': 8,
+            'BANNER': 4,
+            'COMBO MENU': 9,
+            'TODAYS SPECIAL': 6,
+
+
             # 'TODAY'S SPECIAL': 5,  # You can add more limits like this if needed
         }
 
