@@ -63,11 +63,16 @@ class PhoneOTP(models.Model):
     # -------------------------------
     # Generate OTP
     # -------------------------------
+# -------------------------------
+    # Generate OTP
+    # -------------------------------
     def generate_otp(self):
-        self.otp = str(random.randint(100000, 999999))
-
-        # Reset timestamp on regeneration
+        # Changed to 4 digits (1000 to 9999)
+        self.otp = str(random.randint(1000, 9999)) 
         self.created_at = timezone.now()
+        
+    def is_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(minutes=2)
 
     def __str__(self):
         return f"{self.phone_number} - {self.otp}"

@@ -53,7 +53,7 @@ class VerifyOTPSerializer(serializers.Serializer):
         validators=[phone_regex], 
         max_length=15
     )
-    otp = serializers.CharField(max_length=6, min_length=6)
+    otp = serializers.CharField(max_length=4, min_length=4)
 
     def validate_otp(self, value):
         if not value.isdigit():
