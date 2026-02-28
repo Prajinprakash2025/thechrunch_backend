@@ -59,6 +59,10 @@ class LoginView(APIView):
 # 2️⃣ SEND OTP
 # User login start
 # ============================================================
+# ============================================================
+# 2️⃣ SEND / RESEND OTP
+# User login start OR Resend expired OTP
+# ============================================================
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
 
@@ -68,21 +72,28 @@ class SendOTPView(APIView):
 
         phone = serializer.validated_data["phone_number"]
 
-        # Delete old OTP records
+        # 1. Delete any old/expired OTP records for this phone number
         PhoneOTP.objects.filter(phone_number=phone).delete()
 
-        # Create new OTP
+        # 2. Create a fresh OTP record
         otp_obj = PhoneOTP.objects.create(phone_number=phone)
-        otp_obj.generate_otp()
+        otp_obj.generate_otp() # This generates the 4 digits and resets the clock!
         otp_obj.save()
+        
+        # 3. Calculate the new 2-minute expiration time
+        expiry_time = otp_obj.created_at + timezone.timedelta(minutes=2)
 
         print(f"OTP for {phone}: {otp_obj.otp}")
 
+        # 4. Send the new OTP and new timestamp to the frontend
         return Response({
             "status": True,
             "message": "OTP sent successfully",
-            # ⚠️ REMOVE THIS IN PRODUCTION
-            "otp": otp_obj.otp
+            "data": {
+                "phone_number": phone,
+                "test_otp": otp_obj.otp,  # ⚠️ REMOVE THIS IN PRODUCTION
+                "expires_at": expiry_time.strftime("%Y-%m-%d %H:%M:%S")
+            }
         }, status=status.HTTP_200_OK)
 
 
