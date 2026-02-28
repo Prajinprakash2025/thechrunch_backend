@@ -78,10 +78,11 @@ class PublicMenuItemListView(generics.ListAPIView):
         # 1. Start with all available items
         queryset = MenuItem.objects.filter(is_available=True).order_by('-created_at')
         
-        # 2. Read the Query Parameters (?search=...&category=...)
+        # 2. Read the Query Parameters 
         search_query = self.request.query_params.get('search', '')
         category_id = self.request.query_params.get('category', '')
         section_name = self.request.query_params.get('section', '')
+        diet_pref = self.request.query_params.get('diet', '')  # 🟢 VEG/NON-VEG filter
         
         # 3. Apply the filters safely
         if search_query:
@@ -96,8 +97,13 @@ class PublicMenuItemListView(generics.ListAPIView):
         if section_name and str(section_name).upper() != 'ALL':
             queryset = queryset.filter(section__iexact=section_name)
             
-        return queryset
+        # 4. Apply Dietary Preference Filter (VEG / NON-VEG)
+        if diet_pref and str(diet_pref).upper() != 'ALL':
+            queryset = queryset.filter(dietary_preference__iexact=diet_pref)
 
+        return queryset
+    
+    
 class AdminMenuItemListCreateView(generics.ListCreateAPIView):
     serializer_class = MenuItemSerializer
     permission_classes = [IsAdminOrStaff]  # <-- Updated to allow staff

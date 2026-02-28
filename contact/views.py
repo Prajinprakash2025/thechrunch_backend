@@ -1,30 +1,37 @@
-from .serializers import ContactMessageSerializer
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.response import Response
-from .models import ContactMessage
-from .serializers import ContactMessageSerializer
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.pagination import PageNumberPagination
+from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
-from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
-from accounts.permissions import IsAdminOrStaff 
-from accounts.permissions import IsSuperAdmin 
+from django.db.models import Q
 
+from .models import ContactMessage
+from .serializers import ContactMessageSerializer
 
+from accounts.permissions import IsAdminOrStaff, IsSuperAdmin 
 
+# ============================================================
+# 📄 PAGINATION CLASS (12 items per page)
+# ============================================================
+class ContactPagination(PageNumberPagination):
+    page_size = 12  
+    page_size_query_param = 'page_size'
+    max_page_size = 50
 
+# ============================================================
+# 1️⃣ PUBLIC CONTACT CREATE VIEW
+# ============================================================
 class ContactCreateView(generics.CreateAPIView):
-
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
-    permission_classes = [permissions.AllowAny]  # Public access
+    permission_classes = [AllowAny]  # Public access
 
     def create(self, request, *args, **kwargs):
-
-        # Let DRF handle validation + save
         response = super().create(request, *args, **kwargs)
-
-        # Wrap response in standardized format
         return Response(
             {
                 "status": True,
@@ -34,36 +41,59 @@ class ContactCreateView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED,
         )
 
-
-
-
-class AdminContactListView(generics.ListAPIView):
-
-    queryset = ContactMessage.objects.all().order_by("-created_at")
-    serializer_class = ContactMessageSerializer
+# ============================================================
+# 2️⃣ ADMIN CONTACT LIST VIEW (With Search & Pagination)
+# ============================================================
+class AdminContactListView(APIView):
     permission_classes = [IsAdminOrStaff]
 
+    def get(self, request):
+        contacts = ContactMessage.objects.all().order_by("-created_at")
+        
+        search_query = request.query_params.get('search', '')
+        
+        if search_query:
+            contacts = contacts.filter(
+                Q(full_name__icontains=search_query) |
+                Q(email__icontains=search_query)
+            )
 
+        paginator = ContactPagination()
+        paginated_contacts = paginator.paginate_queryset(contacts, request, view=self)
+        
+        serializer = ContactMessageSerializer(paginated_contacts, many=True)
+        
+        return Response({
+            "status": True,
+            "message": "Contacts retrieved successfully",
+            "total_items": paginator.page.paginator.count,
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next_page_url": paginator.get_next_link(),
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+# ============================================================
+# 3️⃣ ADMIN CONTACT DETAIL VIEW
+# ============================================================
 class AdminContactDetailView(generics.RetrieveAPIView):
-
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
     permission_classes = [IsAdminOrStaff]
 
-
+# ============================================================
+# 4️⃣ ADMIN CONTACT DELETE VIEW
+# ============================================================
 class AdminContactDeleteView(generics.DestroyAPIView):
-
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
     permission_classes = [IsSuperAdmin]
 
-
-
 # ============================================================
-# 📧 ADMIN EMAIL REPLY VIEW
+# 5️⃣ ADMIN EMAIL REPLY VIEW
 # ============================================================
 class AdminContactReplyView(APIView):
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsAdminOrStaff]
 
     def post(self, request, pk):
         contact_message = get_object_or_404(ContactMessage, pk=pk)
@@ -87,7 +117,9 @@ class AdminContactReplyView(APIView):
                 [contact_message.email], 
                 fail_silently=False
             )
-            
+            contact_message.reply_message = reply_text
+            contact_message.replied_at = timezone.now()
+            contact_message.save()
             return Response({
                 "status": True,
                 "message": f"Reply sent successfully to {contact_message.email}!"

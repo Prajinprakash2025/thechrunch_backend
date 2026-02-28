@@ -13,5 +13,7 @@ class ContactMessageSerializer(serializers.ModelSerializer):
             "subject",
             "message",
             "created_at",
+            "reply_message",  
+            "replied_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "created_at","replied_at"]
