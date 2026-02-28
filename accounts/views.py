@@ -243,7 +243,7 @@ from .models import PhoneOTP
 
 class UserRegistrationView(generics.CreateAPIView):
     """
-    POST: Register a new user, generate a default OTP (1234), and set a 2-min expiry.
+    POST: Register a new user, generate a random 4-digit OTP, and set a 2-min expiry.
     """
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny] 
@@ -255,9 +255,11 @@ class UserRegistrationView(generics.CreateAPIView):
             user = serializer.save()
             
             otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=user.phone_number)
-            otp_instance.otp = "1234"  # <-- Changed to 4 digits!
+            
+            # 👇 Replaced "1234" with your model's random OTP generator
+            otp_instance.generate_otp() 
             otp_instance.is_verified = False
-            otp_instance.created_at = timezone.now() 
+            # Note: generate_otp() already resets the created_at time for you!
             otp_instance.save()
             
             expiry_time = otp_instance.created_at + timezone.timedelta(minutes=2)
@@ -270,7 +272,8 @@ class UserRegistrationView(generics.CreateAPIView):
                     "name": user.first_name,
                     "email": user.email,
                     "role": user.role,
-                    "test_otp": "1234", # <-- Changed to 4 digits!
+                    # 👇 Dynamically pulls the random OTP that was just generated
+                    "test_otp": otp_instance.otp, 
                     "expires_at": expiry_time.strftime("%Y-%m-%d %H:%M:%S") 
                 }
             }, status=status.HTTP_201_CREATED)
