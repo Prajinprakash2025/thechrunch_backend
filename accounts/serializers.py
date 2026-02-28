@@ -59,3 +59,42 @@ class VerifyOTPSerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only numbers.")
         return value
+    
+
+
+from rest_framework import serializers
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    # We create a custom 'name' field for the frontend to use
+    name = serializers.CharField(write_only=True, required=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = ['phone_number', 'email', 'name']
+
+    def validate_phone_number(self, value):
+        if User.objects.filter(phone_number=value).exists():
+            raise serializers.ValidationError("An account with this phone number already exists.")
+        return value
+
+    def create(self, validated_data):
+        name = validated_data.pop('name')
+        
+        # Create the user object
+        user = User(
+            username=validated_data['phone_number'], # Use phone number as the required username
+            phone_number=validated_data['phone_number'],
+            email=validated_data.get('email', ''),
+            first_name=name, # Save the name into Django's default first_name field
+            role='user'      # Default role for new customer signups
+        )
+        
+        # Set an unusable password since they will log in with OTP
+        user.set_unusable_password() 
+        user.save()
+        
+        return user

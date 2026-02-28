@@ -221,3 +221,38 @@ class LogoutView(APIView):
             return Response({"message": "Successfully logged out"}, status=205)
         except Exception as e:
             return Response(status=400)
+        
+
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from .serializers import UserRegistrationSerializer
+
+class UserRegistrationView(generics.CreateAPIView):
+    """
+    POST: Register a new user with Phone, Name, and (optional) Email.
+    """
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [AllowAny] # Anyone can register
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                "status": True,
+                "message": "User registered successfully!",
+                "data": {
+                    "phone_number": user.phone_number,
+                    "name": user.first_name,
+                    "email": user.email,
+                    "role": user.role
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        return Response({
+            "status": False,
+            "message": "Registration failed",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)

@@ -71,3 +71,5 @@ class PhoneOTP(models.Model):
 
     def __str__(self):
         return f"{self.phone_number} - {self.otp}"
+    
+
