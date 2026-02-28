@@ -88,7 +88,8 @@ class PublicMenuItemListView(generics.ListAPIView):
         if search_query:
             queryset = queryset.filter(
                 Q(name__icontains=search_query) | 
-                Q(description__icontains=search_query)
+                Q(description__icontains=search_query) |
+                Q(category__name__icontains=search_query) # <-- ADDED THIS LINE!
             )
             
         if category_id and str(category_id).upper() != 'ALL':
@@ -118,11 +119,12 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
         category_id = self.request.query_params.get('category', '')
         section_name = self.request.query_params.get('section', '')
         
-        # 3. Apply Text Search
+        # 3. Apply Text Search (Checks Name, Description, AND Category Name!)
         if search_query:
             queryset = queryset.filter(
                 Q(name__icontains=search_query) | 
-                Q(description__icontains=search_query)
+                Q(description__icontains=search_query) |
+                Q(category__name__icontains=search_query)  # <-- ADDED THIS LINE!
             )
             
         # 4. Apply Category Filter
