@@ -227,27 +227,38 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from .serializers import UserRegistrationSerializer
+from .models import PhoneOTP  # <-- Make sure to import your PhoneOTP model!
 
 class UserRegistrationView(generics.CreateAPIView):
     """
-    POST: Register a new user with Phone, Name, and (optional) Email.
+    POST: Register a new user and generate a default OTP (1234) for testing.
     """
     serializer_class = UserRegistrationSerializer
-    permission_classes = [AllowAny] # Anyone can register
+    permission_classes = [AllowAny] 
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         
         if serializer.is_valid():
+            # 1. Save the new user to the database
             user = serializer.save()
+            
+            # 2. Create an OTP entry for this phone number
+            otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=user.phone_number)
+            otp_instance.otp = "1234"  # Hardcoded to 1234 for testing!
+            otp_instance.is_verified = False
+            otp_instance.save()
+            
+            # 3. Return the success response
             return Response({
                 "status": True,
-                "message": "User registered successfully!",
+                "message": "User registered successfully! Please verify OTP.",
                 "data": {
                     "phone_number": user.phone_number,
                     "name": user.first_name,
                     "email": user.email,
-                    "role": user.role
+                    "role": user.role,
+                    "test_otp": "1234" # Printing this in Postman so you know it worked
                 }
             }, status=status.HTTP_201_CREATED)
             
