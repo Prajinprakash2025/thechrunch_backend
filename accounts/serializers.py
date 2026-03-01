@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate, get_user_model
 from django.core.validators import RegexValidator
-
+from .models import Address
 User = get_user_model()
 
 # Phone number validation rule
@@ -91,3 +91,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
         
         instance.save()
         return instance
+    
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = ['id', 'address_type', 'complete_address', 'landmark', 'pincode', 'latitude', 'longitude', 'is_default']
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        # Automatically assign the logged-in user from the JWT token
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)

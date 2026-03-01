@@ -73,3 +73,34 @@ class PhoneOTP(models.Model):
         return f"{self.phone_number} - {self.otp}"
     
 
+# Add this at the bottom of accounts/models.py
+class Address(models.Model):
+    ADDRESS_TYPES = (
+        ('Home', 'Home'),
+        ('Work', 'Work'),
+        ('Other', 'Other'),
+    )
+    
+    # Links this address to a specific user
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
+    
+    # Address Details
+    address_type = models.CharField(max_length=10, choices=ADDRESS_TYPES, default='Home')
+    complete_address = models.TextField(help_text="House/Flat No., Building Name, Street")
+    landmark = models.CharField(max_length=255, blank=True, null=True)
+    pincode = models.CharField(max_length=10)
+    
+    # Swiggy Model: GPS tracking
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    
+    is_default = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        # 🌟 SWIGGY MAGIC: If this address is set as default, turn off 'is_default' for all other addresses of this user.
+        if self.is_default:
+            Address.objects.filter(user=self.user).update(is_default=False)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.user.first_name} - {self.address_type} - {self.pincode}"

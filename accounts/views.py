@@ -240,6 +240,36 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+# Add Address and AddressSerializer to your imports at the top
+from .models import Address
+from .serializers import AddressSerializer
+
+# ============================================================
+# 9️⃣ ADDRESS MANAGEMENT (Swiggy Model)
+# ============================================================
+
+# GET: List all addresses for the logged-in user
+# POST: Create a new address for the logged-in user
+class AddressListCreateView(generics.ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # SECURITY: Only return the addresses belonging to the logged-in user
+        return Address.objects.filter(user=self.request.user).order_by('-is_default', '-id')
+
+# GET: View a specific address
+# PATCH: Update a specific address (like changing it to default)
+# DELETE: Remove an address
+class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # SECURITY: Ensure they can only edit/delete their OWN addresses
+        return Address.objects.filter(user=self.request.user)
+
+
 class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 

@@ -8,7 +8,9 @@ from .views import (
     CreateStaffView,
     VerifySessionView,
     LogoutView,
-    UserProfileView
+    UserProfileView,
+    AddressListCreateView,
+    AddressDetailView
 )
 
 urlpatterns = [
@@ -26,6 +28,8 @@ urlpatterns = [
     path('verify-otp/', VerifyOTPView.as_view(), name='verify_otp'),
     path('login-otp/', LoginRequestOTPView.as_view(), name='login_request_otp'),
     path('profile/', UserProfileView.as_view(), name='user_profile'),
+    path('addresses/', AddressListCreateView.as_view(), name='address_list_create'),
+    path('addresses/<int:pk>/', AddressDetailView.as_view(), name='address_detail'),
 
     # ==========================================
     # 3. SESSION UTILITIES
