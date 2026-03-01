@@ -67,3 +67,27 @@ class VerifyOTPSerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError("OTP must contain only numbers.")
         return value
+    
+# -------------------------------
+# 4. User Profile Serializer
+# -------------------------------
+class UserProfileSerializer(serializers.ModelSerializer):
+    # We map 'name' for the frontend to Django's 'first_name' in the database
+    name = serializers.CharField(source='first_name', required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = ['phone_number', 'name', 'email', 'role']
+        # Protect the phone number and role from being changed here!
+        read_only_fields = ['phone_number', 'role'] 
+
+    def update(self, instance, validated_data):
+        # Update first_name (which the frontend calls 'name')
+        if 'first_name' in validated_data:
+            instance.first_name = validated_data.pop('first_name')
+            
+        # Update email
+        instance.email = validated_data.get('email', instance.email)
+        
+        instance.save()
+        return instance

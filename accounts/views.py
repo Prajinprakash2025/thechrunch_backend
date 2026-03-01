@@ -9,6 +9,7 @@ from django.utils import timezone
 from .models import PhoneOTP
 from .serializers import LoginSerializer, VerifyOTPSerializer
 from .permissions import IsAdminUser
+from rest_framework import generics
 
 User = get_user_model()
 
@@ -222,6 +223,21 @@ class VerifySessionView(APIView):
             "user_id": request.user.id,
             "username": request.user.username
         })
+    
+
+from .serializers import UserProfileSerializer # <-- Add this to your imports at the top!
+
+# ============================================================
+# 8️⃣ USER PROFILE (View & Update)
+# ============================================================
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated] # Must be logged in!
+
+    def get_object(self):
+        # SECURITY: This ensures a user can ONLY view and edit their own profile.
+        # It completely ignores any ID passed in the URL and just looks at the JWT token.
+        return self.request.user
 
 
 class LogoutView(APIView):
