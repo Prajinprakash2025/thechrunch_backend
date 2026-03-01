@@ -45,34 +45,29 @@ class User(AbstractUser):
 
 class PhoneOTP(models.Model):
     """
-    Handles OTP authentication for users
+    Acts as the Temporary Store for OTPs and Unverified Registrations
     """
-
-    phone_number = models.CharField(max_length=15)
+    phone_number = models.CharField(max_length=15, unique=True)
     otp = models.CharField(max_length=6)
+    
+    # Temp Data Storage
+    name = models.CharField(max_length=150, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True) # Tracks the 24-hour data life
+    otp_created_at = models.DateTimeField(auto_now=True) # Tracks the 2-minute OTP life
     is_verified = models.BooleanField(default=False)
 
-    # -------------------------------
-    # OTP expiry check (5 mins)
-    # -------------------------------
-    def is_expired(self):
-        return timezone.now() > self.created_at + timezone.timedelta(minutes=5)
+    def is_otp_expired(self):
+        return timezone.now() > self.otp_created_at + timezone.timedelta(minutes=2)
 
-    # -------------------------------
-    # Generate OTP
-    # -------------------------------
-# -------------------------------
-    # Generate OTP
-    # -------------------------------
+    def is_data_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(hours=24)
+
     def generate_otp(self):
-        # Changed to 4 digits (1000 to 9999)
-        self.otp = str(random.randint(1000, 9999)) 
-        self.created_at = timezone.now()
-        
-    def is_expired(self):
-        return timezone.now() > self.created_at + timezone.timedelta(minutes=2)
+        self.otp = str(random.randint(100000, 999999))
+        self.save() # Note: auto_now on otp_created_at will automatically reset the 2-min clock!
 
     def __str__(self):
         return f"{self.phone_number} - {self.otp}"

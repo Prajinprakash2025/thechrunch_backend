@@ -166,3 +166,15 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASS')
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+
+# settings.py
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'otp_requests': '3/m', # Limits OTP endpoints to 3 requests per minute per IP
+    }
+}
