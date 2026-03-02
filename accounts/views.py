@@ -1,51 +1,38 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.contrib.auth import get_user_model
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from .models import PhoneOTP
-from .serializers import (
-    LoginSerializer,
-    SendOTPSerializer,
-    VerifyOTPSerializer
-)
-from .permissions import IsAdminUser   # <-- Updated from IsOwner
+from .serializers import LoginSerializer, VerifyOTPSerializer
+from .permissions import IsAdminUser
+from rest_framework import generics
 
 User = get_user_model()
 
 
 # ============================================================
-# 1️⃣ PASSWORD LOGIN
-# Superadmin / Admin / Staff
+# 1️⃣ ADMIN & STAFF: PASSWORD LOGIN
 # ============================================================
 class LoginView(APIView):
-    permission_classes = [AllowAny] # Ensures anyone can access the login page
+    permission_classes = [AllowAny] 
 
     def post(self, request):
-        # Validate request data
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         user = serializer.validated_data["user"]
-
-        # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
 
-        # --------------------------------------------------
-        # Resolve Role Properly
-        # --------------------------------------------------
         if user.is_superuser and not user.role:
-            role = "admin" # Default superusers to admin for the frontend
+            role = "admin" 
         elif user.role:
             role = user.role
         else:
             role = "unknown"
 
-        # --------------------------------------------------
-        # Response
-        # --------------------------------------------------
         return Response({
             "status": True,
             "message": "Login successful",
@@ -56,39 +43,69 @@ class LoginView(APIView):
 
 
 # ============================================================
-# 2️⃣ SEND OTP
-# User login start
+# 2️⃣ OTP FLOW: SIGNUP - STEP 1 (Request OTP)
 # ============================================================
-class SendOTPView(APIView):
+class SignupRequestOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp_requests' 
 
     def post(self, request):
-        serializer = SendOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        phone = request.data.get("phone_number")
+        name = request.data.get("name", "")
+        email = request.data.get("email", "")
 
-        phone = serializer.validated_data["phone_number"]
+        if not phone or not name:
+            return Response({"status": False, "message": "Phone and Name are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Delete old OTP records
-        PhoneOTP.objects.filter(phone_number=phone).delete()
+        # 1. Check Permanent Table
+        if User.objects.filter(phone_number=phone).exists():
+            return Response({"status": False, "message": "User already exists. Please login."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create new OTP
-        otp_obj = PhoneOTP.objects.create(phone_number=phone)
-        otp_obj.generate_otp()
-        otp_obj.save()
-
-        print(f"OTP for {phone}: {otp_obj.otp}")
-
+        # 2. Update or Create Temp Store & Generate OTP
+        otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
+        otp_instance.name = name   
+        otp_instance.email = email 
+        otp_instance.generate_otp() 
+        
         return Response({
-            "status": True,
-            "message": "OTP sent successfully",
-            # ⚠️ REMOVE THIS IN PRODUCTION
-            "otp": otp_obj.otp
+            "status": True, 
+            "message": "OTP sent! Data saved to temp store.",
+            "data": {"test_otp": otp_instance.otp}
         }, status=status.HTTP_200_OK)
 
 
 # ============================================================
-# 3️⃣ VERIFY OTP
-# User login complete
+# 3️⃣ OTP FLOW: SIGNUP & LOGIN - STEP 2 (Resend OTP)
+# ============================================================
+class ResendOTPView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = 'otp_requests' 
+
+    def post(self, request):
+        phone = request.data.get("phone_number")
+
+        try:
+            otp_instance = PhoneOTP.objects.get(phone_number=phone)
+            
+            # Clean-up: If temp data is older than 24h, delete it.
+            if otp_instance.is_data_expired():
+                otp_instance.delete()
+                return Response({"status": False, "message": "Session expired. Please start signup again."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Generate new OTP (resets 2-min timer)
+            otp_instance.generate_otp()
+            return Response({
+                "status": True, 
+                "message": "New OTP sent!",
+                "data": {"test_otp": otp_instance.otp}
+            }, status=status.HTTP_200_OK)
+
+        except PhoneOTP.DoesNotExist:
+            return Response({"status": False, "message": "No session found. Please request OTP first."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ============================================================
+# 4️⃣ OTP FLOW: SIGNUP & LOGIN - STEP 3 (Verify OTP)
 # ============================================================
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -100,48 +117,38 @@ class VerifyOTPView(APIView):
         phone = serializer.validated_data["phone_number"]
         otp = serializer.validated_data["otp"]
 
-        # Check OTP record
         try:
-            otp_obj = PhoneOTP.objects.get(
-                phone_number=phone,
-                otp=otp
-            )
+            otp_instance = PhoneOTP.objects.get(phone_number=phone, otp=otp)
         except PhoneOTP.DoesNotExist:
-            return Response(
-                {"status": False, "message": "Invalid OTP"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"status": False, "message": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check expiry
-        if otp_obj.is_expired():
-            otp_obj.delete()
-            return Response(
-                {"status": False, "message": "OTP expired. Please request a new one."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Check 2-minute timer
+        if otp_instance.is_otp_expired():
+            return Response({"status": False, "message": "OTP expired. Please click resend."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Mark verified
-        otp_obj.is_verified = True
-        otp_obj.save()
-
-        # Create user if not exists
+        # Move from Temp Store to Permanent Table
         user, created = User.objects.get_or_create(
             phone_number=phone,
             defaults={
                 "username": phone,
-                "role": "user"   # <-- CHANGED FROM "customer" TO "user"
+                "first_name": otp_instance.name if otp_instance.name else "",
+                "email": otp_instance.email if otp_instance.email else "",
+                "role": "user"
             }
         )
+        
+        if created:
+            user.set_unusable_password()
+            user.save()
+
+        # Clean-up Temp Data
+        otp_instance.delete()
 
         # Generate JWT
         refresh = RefreshToken.for_user(user)
-
-        # Delete OTP after use
-        otp_obj.delete()
-
         return Response({
             "status": True,
-            "message": "Login successful",
+            "message": "Verification successful!",
             "role": user.role,
             "refresh": str(refresh),
             "access": str(refresh.access_token),
@@ -149,12 +156,34 @@ class VerifyOTPView(APIView):
 
 
 # ============================================================
-# 4️⃣ CREATE STAFF 
-# Admin Only
+# 5️⃣ OTP FLOW: LOGIN - STEP 1 (Request Login OTP)
 # ============================================================
-class CreateStaffView(APIView): # <-- Renamed to match your new roles
+class LoginRequestOTPView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = 'otp_requests' 
 
-    # <-- CHANGED permission from IsOwner to IsAdminUser
+    def post(self, request):
+        phone = request.data.get("phone_number")
+
+        # 1. Check Permanent Table
+        if not User.objects.filter(phone_number=phone).exists():
+            return Response({"status": False, "message": "Please Signup"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Save to Temp Store & Generate OTP (No name/email needed)
+        otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
+        otp_instance.generate_otp()
+
+        return Response({
+            "status": True, 
+            "message": "Login OTP sent!",
+            "data": {"test_otp": otp_instance.otp}
+        }, status=status.HTTP_200_OK)
+
+
+# ============================================================
+# 6️⃣ ADMIN UTILITY: CREATE STAFF 
+# ============================================================
+class CreateStaffView(APIView): 
     permission_classes = [IsAuthenticated, IsAdminUser] 
 
     def post(self, request):
@@ -163,22 +192,16 @@ class CreateStaffView(APIView): # <-- Renamed to match your new roles
         phone_number = request.data.get("phone_number")
 
         if not username or not password:
-            return Response(
-                {"status": False, "message": "Username and password required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"status": False, "message": "Username and password required"}, status=status.HTTP_400_BAD_REQUEST)
 
         if User.objects.filter(username=username).exists():
-            return Response(
-                {"status": False, "message": "Username already exists"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"status": False, "message": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.create_user(
             username=username,
             password=password,
             phone_number=phone_number,
-            role="staff"    # <-- CHANGED FROM "employee" TO "staff"
+            role="staff" 
         )
 
         return Response({
@@ -188,12 +211,9 @@ class CreateStaffView(APIView): # <-- Renamed to match your new roles
         }, status=status.HTTP_201_CREATED)
 
 
-
-# views.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-
+# ============================================================
+# 7️⃣ SESSION UTILITIES (Verify Token & Logout)
+# ============================================================
 class VerifySessionView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -203,12 +223,52 @@ class VerifySessionView(APIView):
             "user_id": request.user.id,
             "username": request.user.username
         })
+    
+
+from .serializers import UserProfileSerializer # <-- Add this to your imports at the top!
+
+# ============================================================
+# 8️⃣ USER PROFILE (View & Update)
+# ============================================================
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated] # Must be logged in!
+
+    def get_object(self):
+        # SECURITY: This ensures a user can ONLY view and edit their own profile.
+        # It completely ignores any ID passed in the URL and just looks at the JWT token.
+        return self.request.user
 
 
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
+# Add Address and AddressSerializer to your imports at the top
+from .models import Address
+from .serializers import AddressSerializer
+
+# ============================================================
+# 9️⃣ ADDRESS MANAGEMENT (Swiggy Model)
+# ============================================================
+
+# GET: List all addresses for the logged-in user
+# POST: Create a new address for the logged-in user
+class AddressListCreateView(generics.ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # SECURITY: Only return the addresses belonging to the logged-in user
+        return Address.objects.filter(user=self.request.user).order_by('-is_default', '-id')
+
+# GET: View a specific address
+# PATCH: Update a specific address (like changing it to default)
+# DELETE: Remove an address
+class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # SECURITY: Ensure they can only edit/delete their OWN addresses
+        return Address.objects.filter(user=self.request.user)
+
 
 class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -218,6 +278,10 @@ class LogoutView(APIView):
             refresh_token = request.data["refresh"]
             token = RefreshToken(refresh_token)
             token.blacklist() 
+<<<<<<< HEAD
             return Response({"message": "Successfully logged out"}, status=205)
+=======
+            return Response({"message": "Successfully logged out"}, status=status.HTTP_205_RESET_CONTENT)
+>>>>>>> dc2a7a903bc71b9cec85a363a99e81968b176b88
         except Exception as e:
-            return Response(status=400)
+            return Response(status=status.HTTP_400_BAD_REQUEST)
