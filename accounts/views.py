@@ -217,7 +217,7 @@ class LogoutView(APIView):
         try:
             refresh_token = request.data["refresh"]
             token = RefreshToken(refresh_token)
-            token.blacklist() # ടോക്കൺ ബ്ലാക്ക്‌ലിസ്റ്റ് ചെയ്യുന്നു
+            token.blacklist() 
             return Response({"message": "Successfully logged out"}, status=205)
         except Exception as e:
             return Response(status=400)
