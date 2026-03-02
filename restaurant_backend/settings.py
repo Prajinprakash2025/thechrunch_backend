@@ -33,7 +33,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',  # JWT support
     'corsheaders',               # For React frontend
-    'rest_framework_simplejwt.token_blacklist',  # <-- ഇവിടെയാണ് ഇത് നൽകേണ്ടത്!
+    'rest_framework_simplejwt.token_blacklist',  
     
     # Your apps
     'contact',
@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "bookings",
     "inventory",
     'banners',
+    'site_settings',
 ]
 
 MIDDLEWARE = [
