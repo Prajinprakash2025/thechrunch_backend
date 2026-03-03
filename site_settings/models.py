@@ -6,7 +6,11 @@ class SiteSetting(models.Model):
     email_address = models.EmailField(blank=True, null=True, default="")
     phone_number = models.CharField(max_length=20, blank=True, null=True, default="")
     physical_address = models.TextField(blank=True, null=True, default="")
-    map_link = models.URLField(max_length=500, blank=True, null=True)
+    
+    # GPS tracking for Restaurant 
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    
     delivery_radius = models.PositiveIntegerField(default=0, help_text="In KM")
 
     # --- Footer Content & Hours ---

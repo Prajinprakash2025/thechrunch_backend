@@ -7,7 +7,11 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source='email_address', required=False)
     phone = serializers.CharField(source='phone_number', required=False)
     address = serializers.CharField(source='physical_address', required=False)
-    location = serializers.CharField(source='map_link', allow_blank=True, required=False)
+    
+    # Coordinates
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    
     deliveryRadius = serializers.IntegerField(source='delivery_radius', required=False)
     footerDescription = serializers.CharField(source='footer_description', allow_blank=True, required=False)
 
@@ -18,7 +22,8 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSetting
         fields = [
-            'appName', 'email', 'phone', 'address', 'location', 
+            'appName', 'email', 'phone', 'address', 
+            'latitude', 'longitude', 
             'deliveryRadius', 'footerDescription', 'workingHours', 'socials'
         ]
 
