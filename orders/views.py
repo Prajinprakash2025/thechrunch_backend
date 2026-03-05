@@ -4,62 +4,107 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 
+# Make sure these model imports match your exact app structure!
 from .models import Cart, CartItem, Order, OrderItem
-from inventory.models import MenuItem
+from inventory.models import MenuItem 
 from accounts.models import Address
 from .serializers import CartSerializer, OrderSerializer
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from django.shortcuts import get_object_or_404
+# ==========================================
+# 1. GET CART API (To load the cart page)
+# ==========================================
+class CartDetailView(views.APIView):
+    permission_classes = [IsAuthenticated]
 
-from .models import Cart, CartItem
-# Make sure to import your MenuItem model here!
-# from store.models import MenuItem 
+    def get(self, request):
+        cart, _ = Cart.objects.get_or_create(user=request.user)
+        serializer = CartSerializer(cart)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ==========================================
+# 2. UPDATE CART API (Single Item +, -, or Delete)
+# ==========================================
+class CartUpdateView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        cart, _ = Cart.objects.get_or_create(user=request.user)
+        
+        item_id = request.data.get('item_id')
+        action = request.data.get('action') # 'add', 'decrease', or 'remove'
+
+        if not item_id or not action:
+            return Response({"error": "item_id and action are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        menu_item = get_object_or_404(MenuItem, id=item_id)
+        
+        # Get or create the item in the cart
+        cart_item, created = CartItem.objects.get_or_create(cart=cart, item=menu_item)
+        if created:
+            cart_item.quantity = 0 # Start at 0 so 'add' makes it 1
+
+        # Perform the action
+        if action == 'add':
+            cart_item.quantity += 1
+            cart_item.save()
+        elif action == 'decrease':
+            if cart_item.quantity > 1:
+                cart_item.quantity -= 1
+                cart_item.save()
+            else:
+                cart_item.delete()
+        elif action == 'remove':
+            cart_item.delete()
+        else:
+            return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Return the newly updated cart back to React so they can show the new total
+        serializer = CartSerializer(cart)
+        return Response({
+            "message": f"Successfully performed {action}",
+            "cart_data": serializer.data
+        }, status=status.HTTP_200_OK)
+
 
 # ============================================================
-# BULK MERGE CART API (Sync LocalStorage to Database)
+# 3. MERGE CART API (Bulk Sync from LocalStorage on Login)
 # ============================================================
-class CartMergeView(APIView):
+class CartMergeView(views.APIView):
     permission_classes = [IsAuthenticated] 
 
     def post(self, request):
-        # 1. Get or create the Cart for this logged-in user
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        
-        # 2. Grab the array of items from the React frontend
         items_data = request.data.get('items', [])
 
         if not items_data:
             return Response({"message": "No items to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. Clear the old backend cart completely to avoid duplicate junk
-        # Because we trust the frontend localStorage as the "source of truth" right now!
+        # Clear old backend cart to match local storage
         cart.items.all().delete()
 
-        # 4. Loop through the array and save the fresh list to the database
         for data in items_data:
             item_id = data.get('item_id')
             quantity = data.get('quantity', 1)
-
-            # Link it to the actual menu item
             menu_item = get_object_or_404(MenuItem, id=item_id)
 
-            # Create the fresh cart item
             CartItem.objects.create(
                 cart=cart,
                 item=menu_item,
                 quantity=quantity
             )
 
+        # Return the official calculated bill to React
+        serializer = CartSerializer(cart)
         return Response({
             "status": True, 
-            "message": "Local cart successfully merged to database!"
+            "message": "Local cart successfully merged to database!",
+            "cart_data": serializer.data
         }, status=status.HTTP_200_OK)
+
+
 # ==========================================
-# 3. PLACE FINAL ORDER
+# 4. PLACE FINAL ORDER
 # ==========================================
 class PlaceOrderView(views.APIView):
     permission_classes = [IsAuthenticated]
@@ -83,7 +128,12 @@ class PlaceOrderView(views.APIView):
         except Address.DoesNotExist:
             return Response({"error": "Invalid address"}, status=status.HTTP_400_BAD_REQUEST)
 
-        subtotal = sum(item.total_price for item in cart.items.all())
+        # 🌟 FIX: Calculate subtotal manually to prevent Server Crash!
+        subtotal = 0
+        for cart_item in cart.items.all():
+            price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
+            subtotal += (price * cart_item.quantity)
+
         delivery_fee = 0 # Can be made dynamic later
         total_amount = subtotal + delivery_fee
 
@@ -117,8 +167,9 @@ class PlaceOrderView(views.APIView):
             "order_id": order.id
         }, status=status.HTTP_201_CREATED)
 
+
 # ==========================================
-# 4. ORDER HISTORY (List all past orders)
+# 5. ORDER HISTORY (List all past orders)
 # ==========================================
 class OrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
