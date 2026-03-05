@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "inventory",
     'banners',
     'site_settings',
+    'orders',
 ]
 
 MIDDLEWARE = [
