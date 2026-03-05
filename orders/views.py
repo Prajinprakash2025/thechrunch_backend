@@ -18,7 +18,8 @@ class CartDetailView(views.APIView):
 
     def get(self, request):
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        serializer = CartSerializer(cart)
+        # 🌟 FIX: Added context so Django builds the full https:// domain for images!
+        serializer = CartSerializer(cart, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -59,8 +60,8 @@ class CartUpdateView(views.APIView):
         else:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Return the newly updated cart back to React so they can show the new total
-        serializer = CartSerializer(cart)
+        # 🌟 FIX: Added context so React gets the full image URLs after an update!
+        serializer = CartSerializer(cart, context={'request': request})
         return Response({
             "message": f"Successfully performed {action}",
             "cart_data": serializer.data
@@ -94,8 +95,8 @@ class CartMergeView(views.APIView):
                 quantity=quantity
             )
 
-        # Return the official calculated bill to React
-        serializer = CartSerializer(cart)
+        # 🌟 FIX: Added context so React gets the full image URLs after logging in!
+        serializer = CartSerializer(cart, context={'request': request})
         return Response({
             "status": True, 
             "message": "Local cart successfully merged to database!",
@@ -128,7 +129,6 @@ class PlaceOrderView(views.APIView):
         except Address.DoesNotExist:
             return Response({"error": "Invalid address"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 🌟 FIX: Calculate subtotal manually to prevent Server Crash!
         subtotal = 0
         for cart_item in cart.items.all():
             price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
