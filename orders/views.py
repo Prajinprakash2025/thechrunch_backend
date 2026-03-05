@@ -151,6 +151,7 @@ class PlaceOrderView(views.APIView):
         for cart_item in cart.items.all():
             price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
             
+            # 1. Create the permanent receipt (OrderItem)
             OrderItem.objects.create(
                 order=order,
                 item=cart_item.item,
@@ -159,6 +160,14 @@ class PlaceOrderView(views.APIView):
                 quantity=cart_item.quantity
             )
 
+            # 🌟 NEW FIX: Reduce the actual stock of the food item in the inventory!
+            if cart_item.item.quantity >= cart_item.quantity:
+                cart_item.item.quantity -= cart_item.quantity
+            else:
+                cart_item.item.quantity = 0 # Prevent negative stock just in case
+            
+            cart_item.item.save() # Save the new stock level to the database!
+
         # Clear cart after placing order
         cart.items.all().delete()
 
@@ -166,7 +175,6 @@ class PlaceOrderView(views.APIView):
             "message": "Order placed successfully!",
             "order_id": order.id
         }, status=status.HTTP_201_CREATED)
-
 
 # ==========================================
 # 5. ORDER HISTORY (List all past orders)
