@@ -7,6 +7,7 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source='email_address', required=False)
     phone = serializers.CharField(source='phone_number', required=False)
     address = serializers.CharField(source='physical_address', required=False)
+    type_address = serializers.CharField(source='address_type', required=False)
     
     # Coordinates
     latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)

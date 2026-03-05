@@ -6,6 +6,7 @@ class SiteSetting(models.Model):
     email_address = models.EmailField(blank=True, null=True, default="")
     phone_number = models.CharField(max_length=20, blank=True, null=True, default="")
     physical_address = models.TextField(blank=True, null=True, default="")
+    address_type = models.TextField( blank=True, null=True, default="")
     
     # GPS tracking for Restaurant 
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
