@@ -23,7 +23,7 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSetting
         fields = [
-            'appName', 'email', 'phone', 'address', 
+            'appName', 'email', 'phone', 'address','type_address', 
             'latitude', 'longitude', 
             'deliveryRadius', 'footerDescription', 'workingHours', 'socials'
         ]
