@@ -9,58 +9,55 @@ from inventory.models import MenuItem
 from accounts.models import Address
 from .serializers import CartSerializer, OrderSerializer
 
-# ==========================================
-# 1. VIEW CART
-# ==========================================
-class CartDetailView(views.APIView):
-    permission_classes = [IsAuthenticated]
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from django.shortcuts import get_object_or_404
 
-    def get(self, request):
-        cart, _ = Cart.objects.get_or_create(user=request.user)
-        serializer = CartSerializer(cart)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+from .models import Cart, CartItem
+# Make sure to import your MenuItem model here!
+# from store.models import MenuItem 
 
-# ==========================================
-# 2. ADD / UPDATE CART ITEMS
-# ==========================================
-class CartUpdateView(views.APIView):
-    permission_classes = [IsAuthenticated]
+# ============================================================
+# BULK MERGE CART API (Sync LocalStorage to Database)
+# ============================================================
+class CartMergeView(APIView):
+    permission_classes = [IsAuthenticated] 
 
     def post(self, request):
+        # 1. Get or create the Cart for this logged-in user
         cart, _ = Cart.objects.get_or_create(user=request.user)
         
-        item_id = request.data.get('item_id')
-        action = request.data.get('action') # 'add', 'decrease', or 'remove'
+        # 2. Grab the array of items from the React frontend
+        items_data = request.data.get('items', [])
 
-        if not item_id or not action:
-            return Response({"error": "item_id and action are required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not items_data:
+            return Response({"message": "No items to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
-        menu_item = get_object_or_404(MenuItem, id=item_id)
-        
-        cart_item, created = CartItem.objects.get_or_create(cart=cart, item=menu_item)
-        if created:
-            cart_item.quantity = 0
+        # 3. Clear the old backend cart completely to avoid duplicate junk
+        # Because we trust the frontend localStorage as the "source of truth" right now!
+        cart.items.all().delete()
 
-        if action == 'add':
-            cart_item.quantity += 1
-            cart_item.save()
-            return Response({"message": "Item quantity increased"}, status=status.HTTP_200_OK)
+        # 4. Loop through the array and save the fresh list to the database
+        for data in items_data:
+            item_id = data.get('item_id')
+            quantity = data.get('quantity', 1)
 
-        elif action == 'decrease':
-            if cart_item.quantity > 1:
-                cart_item.quantity -= 1
-                cart_item.save()
-                return Response({"message": "Item quantity decreased"}, status=status.HTTP_200_OK)
-            else:
-                cart_item.delete()
-                return Response({"message": "Item removed from cart"}, status=status.HTTP_200_OK)
+            # Link it to the actual menu item
+            menu_item = get_object_or_404(MenuItem, id=item_id)
 
-        elif action == 'remove':
-            cart_item.delete()
-            return Response({"message": "Item completely removed"}, status=status.HTTP_200_OK)
+            # Create the fresh cart item
+            CartItem.objects.create(
+                cart=cart,
+                item=menu_item,
+                quantity=quantity
+            )
 
-        return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
-
+        return Response({
+            "status": True, 
+            "message": "Local cart successfully merged to database!"
+        }, status=status.HTTP_200_OK)
 # ==========================================
 # 3. PLACE FINAL ORDER
 # ==========================================
