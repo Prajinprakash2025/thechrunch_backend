@@ -202,7 +202,7 @@ class CancelOrderView(views.APIView):
         # 1. Check if the order can be cancelled
         if order.order_status != 'PLACED':
             return Response(
-                {"error": "Only orders with status 'PLACED' can be cancelled."}, 
+                {"error":  "Sorry, this order can no longer be cancelled."}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -217,6 +217,6 @@ class CancelOrderView(views.APIView):
                 order_item.item.save()
 
         return Response(
-            {"message": "Order cancelled successfully and stock restored."}, 
+            {"message": "Order cancelled successfully"}, 
             status=status.HTTP_200_OK
         )
