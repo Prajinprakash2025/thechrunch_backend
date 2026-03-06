@@ -22,4 +22,7 @@ urlpatterns = [
     
     # 5. Order History (List past orders)
     path('history/', views.OrderListView.as_view(), name='order-history'),
+
+    # 6. Cancel Order
+    path('cancel/<int:order_id>/', views.CancelOrderView.as_view(), name='cancel-order'),
 ]

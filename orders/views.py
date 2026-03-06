@@ -186,3 +186,37 @@ class OrderListView(generics.ListAPIView):
     def get_queryset(self):
         # Return orders belonging to the logged-in user, newest first
         return Order.objects.filter(user=self.request.user).order_by('-created_at')
+
+
+# ==========================================
+# 6. CANCEL ORDER API 
+# ==========================================
+class CancelOrderView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, order_id):
+        # Fetch the order belonging to the logged-in user
+        order = get_object_or_404(Order, id=order_id, user=request.user)
+
+        # 1. Check if the order can be cancelled
+        if order.order_status != 'PLACED':
+            return Response(
+                {"error": "Only orders with status 'PLACED' can be cancelled."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Update order status to CANCELLED
+        order.order_status = 'CANCELLED'
+        order.save()
+
+        # 3. Return the items back to the inventory stock
+        for order_item in order.items.all():
+            if order_item.item: # Check if the MenuItem still exists in the database
+                order_item.item.quantity += order_item.quantity
+                order_item.item.save()
+
+        return Response(
+            {"message": "Order cancelled successfully and stock restored."}, 
+            status=status.HTTP_200_OK
+        )
