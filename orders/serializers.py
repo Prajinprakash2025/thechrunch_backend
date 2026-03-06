@@ -1,25 +1,23 @@
 from rest_framework import serializers
 from .models import Cart, CartItem, Order, OrderItem
-from accounts.serializers import AddressSerializer # To show address details in order
+# Import MenuItem from inventory to fetch the image
+from inventory.models import MenuItem 
+from accounts.serializers import AddressSerializer 
 
 # ==========================================
 # CART SERIALIZERS
 # ==========================================
-# ==========================================
-# CART SERIALIZERS
-# ==========================================
 class CartItemSerializer(serializers.ModelSerializer):
-    # 🌟 FIX: Renamed fields to match what React expects!
     item_id = serializers.IntegerField(source='item.id', read_only=True)
     name = serializers.CharField(source='item.name', read_only=True)
-    image = serializers.ImageField(source='item.image', read_only=True)
+    # Django automatically builds the full image URL when context is passed
+    image = serializers.ImageField(source='item.image', read_only=True) 
     actual_price = serializers.DecimalField(source='item.actual_price', max_digits=10, decimal_places=2, read_only=True)
     offer_price = serializers.DecimalField(source='item.offer_price', max_digits=10, decimal_places=2, read_only=True)
     total_price = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
-        # 🌟 FIX: Updated the fields list here too!
         fields = ['id', 'item_id', 'name', 'image', 'actual_price', 'offer_price', 'quantity', 'total_price']
 
     def get_total_price(self, obj):
@@ -34,7 +32,6 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ['id', 'user', 'items', 'cart_total']
 
-    # 🌟 FIX: Safely calculate the grand total using the same logic
     def get_cart_total(self, obj):
         total = 0
         for cart_item in obj.items.all():
@@ -47,13 +44,17 @@ class CartSerializer(serializers.ModelSerializer):
 # ORDER SERIALIZERS
 # ==========================================
 class OrderItemSerializer(serializers.ModelSerializer):
+    # Named as 'image' so it can be easily accessed in React as 'item.image'
+    image = serializers.ImageField(source='item.image', read_only=True)
+    item_id = serializers.IntegerField(source='item.id', read_only=True)
+
     class Meta:
         model = OrderItem
-        fields = ['id', 'item_name', 'price', 'quantity']
+        fields = ['id', 'item_id', 'item_name', 'image', 'price', 'quantity']
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    # This will return the full address details instead of just the ID
+    # To get the full address details instead of just the ID
     delivery_address = AddressSerializer(read_only=True) 
 
     class Meta:
