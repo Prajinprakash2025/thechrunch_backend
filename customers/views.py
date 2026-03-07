@@ -1,77 +1,72 @@
 import csv
 from django.http import HttpResponse
-from rest_framework import generics, views, status, filters
-from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser
-from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
-from .serializers import CustomerSerializer
-import csv
-from django.http import HttpResponse
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-
-User = get_user_model()
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from accounts.models import User
+from rest_framework.response import Response
+from rest_framework import generics, status, filters
+from .serializers import CustomerSerializer # Serializer import cheyyan marakkutha
 
 # ==========================================
 # 1. LIST & SEARCH CUSTOMERS API
 # ==========================================
 class CustomerListView(generics.ListAPIView):
     serializer_class = CustomerSerializer
-    permission_classes = [IsAdminUser] # Only admins can view this
+    permission_classes = [IsAdminUser] # Admin-u mathrame list kaanan pattu
     filter_backends = [filters.SearchFilter]
-    # Admin can search by first_name, last_name, or phone_number
     search_fields = ['first_name', 'last_name', 'phone_number']
 
     def get_queryset(self):
-        # Return only regular users (exclude admins/staff if needed)
-        return User.objects.filter(is_superuser=False).order_by('-date_joined')
+        # Admin ozhichulla baaki ella regular users-neyum return cheyyunnu
+        # accounts/models.py-ile 'role' field 'user' aayavar mathram
+        return User.objects.filter(is_superuser=False, role='user').order_by('-date_joined')
 
 # ==========================================
-# 2. TOGGLE BLOCK/UNBLOCK API
+# 2. TOGGLE BLOCK/UNBLOCK CUSTOMER API
 # ==========================================
-class ToggleBlockCustomerView(views.APIView):
+class ToggleBlockCustomerView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request, user_id):
-        user = get_object_or_404(User, id=user_id)
-        
-        # Prevent admin from blocking themselves
-        if user == request.user or user.is_superuser:
-            return Response({"error": "Cannot block an admin user."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Toggle the status
-        user.is_blocked = not user.is_blocked
-        user.save()
-
-        status_text = "blocked" if user.is_blocked else "unblocked"
-        return Response({"message": f"User successfully {status_text}."}, status=status.HTTP_200_OK)
+        try:
+            user = User.objects.get(id=user_id)
+            # accounts/models.py-ile 'is_blocked' field toggle cheyyunnu
+            user.is_blocked = not user.is_blocked 
+            user.save()
+            
+            status_text = "blocked" if user.is_blocked else "unblocked"
+            return Response({"message": f"User successfully {status_text}."}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
 # ==========================================
-# 3. EXPORT CUSTOMERS TO CSV (Google Sheets compatible)
+# 3. EXPORT CUSTOMERS TO CSV (Excel Fixed)
 # ==========================================
 class ExportCustomersCSV(APIView):
-    permission_classes = [IsAuthenticated] # Add admin permissions if needed
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # CSV response set cheyyunnu
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="crunch_customers.csv"'
 
         writer = csv.writer(response)
-        # Write the header row
+        # Header row - Excel-il ee order-il aanu columns varuka
         writer.writerow(['Customer ID', 'First Name', 'Last Name', 'Phone Number', 'Email', 'Joined Date', 'Account Status'])
 
-        # Fetch all users with role 'user'
+        # Role 'user' aaya ellavareyum database-il ninnu edukunnu
         customers = User.objects.filter(role='user')
 
         for user in customers:
-            status = "Blocked" if getattr(user, 'is_blocked', False) else "Active"
+            # is_blocked field check cheythu status string aakkunnu
+            acc_status = "Blocked" if getattr(user, 'is_blocked', False) else "Active"
             joined_date = user.date_joined.strftime('%Y-%m-%d') if user.date_joined else ""
             
-            # 🚀 THE FIX: Wrapping the phone number in an Excel text formula
-            phone_number_text = f'="{user.phone_number}"' if user.phone_number else ""
+            # 🚀 THE EXCEL FIX: Prepending a single quote (')
+            # Excel-il phone number scientific notation aavathe 'Full' aayi kaanaan
+            phone_number_text = f"'{user.phone_number}" if user.phone_number else ""
             
-            # Write data rows
+            # Row ezhuthunnu
             writer.writerow([
                 user.id,
                 user.first_name,
@@ -79,7 +74,7 @@ class ExportCustomersCSV(APIView):
                 phone_number_text,
                 user.email,
                 joined_date,
-                status
+                acc_status
             ])
 
         return response
