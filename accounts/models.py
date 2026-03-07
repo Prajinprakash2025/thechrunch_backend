@@ -36,8 +36,14 @@ class User(AbstractUser):
         blank=True
     )
 
-    # Optional flags (useful later)
+    # Optional flags
     is_phone_verified = models.BooleanField(default=False)
+    
+    # NEW: Block status flag
+    is_blocked = models.BooleanField(
+        default=False, 
+        help_text="Designates whether this user should be treated as blocked."
+    )
 
     def __str__(self):
         return f"{self.username} - {self.role if self.role else 'superadmin'}"
@@ -55,8 +61,8 @@ class PhoneOTP(models.Model):
     email = models.EmailField(blank=True, null=True)
 
     # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True) # Tracks the 24-hour data life
-    otp_created_at = models.DateTimeField(auto_now=True) # Tracks the 2-minute OTP life
+    created_at = models.DateTimeField(auto_now_add=True) 
+    otp_created_at = models.DateTimeField(auto_now=True) 
     is_verified = models.BooleanField(default=False)
 
     def is_otp_expired(self):
@@ -67,13 +73,15 @@ class PhoneOTP(models.Model):
 
     def generate_otp(self):
         self.otp = str(random.randint(100000, 999999))
-        self.save() # Note: auto_now on otp_created_at will automatically reset the 2-min clock!
+        self.save() 
 
     def __str__(self):
         return f"{self.phone_number} - {self.otp}"
     
 
-# Add this at the bottom of accounts/models.py
+# ============================================================
+# ADDRESS MODEL
+# ============================================================
 class Address(models.Model):
     ADDRESS_TYPES = (
         ('Home', 'Home'),
@@ -90,14 +98,14 @@ class Address(models.Model):
     landmark = models.CharField(max_length=255, blank=True, null=True)
     pincode = models.CharField(max_length=10)
     
-    # Swiggy Model: GPS tracking
+    # GPS tracking
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     
     is_default = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
-        # 🌟 SWIGGY MAGIC: If this address is set as default, turn off 'is_default' for all other addresses of this user.
+        # If this address is set as default, turn off 'is_default' for all other addresses of this user.
         if self.is_default:
             Address.objects.filter(user=self.user).update(is_default=False)
         super().save(*args, **kwargs)

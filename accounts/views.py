@@ -3,19 +3,35 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-
-from .models import PhoneOTP
-from .serializers import LoginSerializer, VerifyOTPSerializer
-from .permissions import IsAdminUser
 from rest_framework import generics
+
+from .models import PhoneOTP, Address
+from .serializers import LoginSerializer, VerifyOTPSerializer, UserProfileSerializer, AddressSerializer
+from .permissions import IsAdminUser
 
 User = get_user_model()
 
+# ============================================================
+# CUSTOM JWT LOGIN TO HANDLE BLOCKED USERS
+# ============================================================
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if self.user.is_blocked:
+            raise AuthenticationFailed("Your account has been blocked. Please contact Crunch.")
+        return data
+
+class CustomTokenLoginView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
 
 # ============================================================
-# 1️⃣ ADMIN & STAFF: PASSWORD LOGIN
+# 1. ADMIN & STAFF: PASSWORD LOGIN
 # ============================================================
 class LoginView(APIView):
     permission_classes = [AllowAny] 
@@ -24,6 +40,11 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
+        
+        # Check if user is blocked
+        if user.is_blocked:
+            return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
+
         refresh = RefreshToken.for_user(user)
 
         if user.is_superuser and not user.role:
@@ -43,7 +64,7 @@ class LoginView(APIView):
 
 
 # ============================================================
-# 2️⃣ OTP FLOW: SIGNUP - STEP 1 (Request OTP)
+# 2. OTP FLOW: SIGNUP - STEP 1 (Request OTP)
 # ============================================================
 class SignupRequestOTPView(APIView):
     permission_classes = [AllowAny]
@@ -57,11 +78,9 @@ class SignupRequestOTPView(APIView):
         if not phone or not name:
             return Response({"status": False, "message": "Phone and Name are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Check Permanent Table
         if User.objects.filter(phone_number=phone).exists():
             return Response({"status": False, "message": "User already exists. Please login."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Update or Create Temp Store & Generate OTP
         otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.name = name   
         otp_instance.email = email 
@@ -75,7 +94,7 @@ class SignupRequestOTPView(APIView):
 
 
 # ============================================================
-# 3️⃣ OTP FLOW: SIGNUP & LOGIN - STEP 2 (Resend OTP)
+# 3. OTP FLOW: SIGNUP & LOGIN - STEP 2 (Resend OTP)
 # ============================================================
 class ResendOTPView(APIView):
     permission_classes = [AllowAny]
@@ -87,12 +106,10 @@ class ResendOTPView(APIView):
         try:
             otp_instance = PhoneOTP.objects.get(phone_number=phone)
             
-            # Clean-up: If temp data is older than 24h, delete it.
             if otp_instance.is_data_expired():
                 otp_instance.delete()
                 return Response({"status": False, "message": "Session expired. Please start signup again."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Generate new OTP (resets 2-min timer)
             otp_instance.generate_otp()
             return Response({
                 "status": True, 
@@ -105,7 +122,7 @@ class ResendOTPView(APIView):
 
 
 # ============================================================
-# 4️⃣ OTP FLOW: SIGNUP & LOGIN - STEP 3 (Verify OTP)
+# 4. OTP FLOW: SIGNUP & LOGIN - STEP 3 (Verify OTP)
 # ============================================================
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -122,11 +139,9 @@ class VerifyOTPView(APIView):
         except PhoneOTP.DoesNotExist:
             return Response({"status": False, "message": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check 2-minute timer
         if otp_instance.is_otp_expired():
             return Response({"status": False, "message": "OTP expired. Please click resend."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Move from Temp Store to Permanent Table
         user, created = User.objects.get_or_create(
             phone_number=phone,
             defaults={
@@ -137,14 +152,16 @@ class VerifyOTPView(APIView):
             }
         )
         
+        # Check if user is blocked before generating token
+        if user.is_blocked:
+            return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
+
         if created:
             user.set_unusable_password()
             user.save()
 
-        # Clean-up Temp Data
         otp_instance.delete()
 
-        # Generate JWT
         refresh = RefreshToken.for_user(user)
         return Response({
             "status": True,
@@ -156,7 +173,7 @@ class VerifyOTPView(APIView):
 
 
 # ============================================================
-# 5️⃣ OTP FLOW: LOGIN - STEP 1 (Request Login OTP)
+# 5. OTP FLOW: LOGIN - STEP 1 (Request Login OTP)
 # ============================================================
 class LoginRequestOTPView(APIView):
     permission_classes = [AllowAny]
@@ -165,11 +182,14 @@ class LoginRequestOTPView(APIView):
     def post(self, request):
         phone = request.data.get("phone_number")
 
-        # 1. Check Permanent Table
-        if not User.objects.filter(phone_number=phone).exists():
+        try:
+            user = User.objects.get(phone_number=phone)
+            # Prevent sending OTP if account is already blocked
+            if user.is_blocked:
+                return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
+        except User.DoesNotExist:
             return Response({"status": False, "message": "Please Signup"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Save to Temp Store & Generate OTP (No name/email needed)
         otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
 
@@ -181,7 +201,7 @@ class LoginRequestOTPView(APIView):
 
 
 # ============================================================
-# 6️⃣ ADMIN UTILITY: CREATE STAFF 
+# 6. ADMIN UTILITY: CREATE STAFF 
 # ============================================================
 class CreateStaffView(APIView): 
     permission_classes = [IsAuthenticated, IsAdminUser] 
@@ -212,7 +232,7 @@ class CreateStaffView(APIView):
 
 
 # ============================================================
-# 7️⃣ SESSION UTILITIES (Verify Token & Logout)
+# 7. SESSION UTILITIES (Verify Token & Logout)
 # ============================================================
 class VerifySessionView(APIView):
     permission_classes = [IsAuthenticated]
@@ -225,48 +245,32 @@ class VerifySessionView(APIView):
         })
     
 
-from .serializers import UserProfileSerializer # <-- Add this to your imports at the top!
-
 # ============================================================
-# 8️⃣ USER PROFILE (View & Update)
+# 8. USER PROFILE (View & Update)
 # ============================================================
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
-    permission_classes = [IsAuthenticated] # Must be logged in!
+    permission_classes = [IsAuthenticated] 
 
     def get_object(self):
-        # SECURITY: This ensures a user can ONLY view and edit their own profile.
-        # It completely ignores any ID passed in the URL and just looks at the JWT token.
         return self.request.user
 
 
-# Add Address and AddressSerializer to your imports at the top
-from .models import Address
-from .serializers import AddressSerializer
-
 # ============================================================
-# 9️⃣ ADDRESS MANAGEMENT (Swiggy Model)
+# 9. ADDRESS MANAGEMENT
 # ============================================================
-
-# GET: List all addresses for the logged-in user
-# POST: Create a new address for the logged-in user
 class AddressListCreateView(generics.ListCreateAPIView):
     serializer_class = AddressSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # SECURITY: Only return the addresses belonging to the logged-in user
         return Address.objects.filter(user=self.request.user).order_by('-is_default', '-id')
 
-# GET: View a specific address
-# PATCH: Update a specific address (like changing it to default)
-# DELETE: Remove an address
 class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AddressSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # SECURITY: Ensure they can only edit/delete their OWN addresses
         return Address.objects.filter(user=self.request.user)
 
 

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'banners',
     'site_settings',
     'orders',
+    'customers',
 ]
 
 MIDDLEWARE = [
