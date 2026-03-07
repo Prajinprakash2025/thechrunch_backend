@@ -9,5 +9,4 @@ urlpatterns = [
     path('<int:user_id>/toggle-block/', views.ToggleBlockCustomerView.as_view(), name='toggle-block'),
     
     # GET /api/customers/export/csv/
-    path('export/csv/', views.ExportCustomersCSVView.as_view(), name='export-csv'),
-]
+path('export/csv/', views.ExportCustomersCSV.as_view(), name='export-csv'),]
