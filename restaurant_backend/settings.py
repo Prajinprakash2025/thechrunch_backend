@@ -168,15 +168,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # settings.py
+
 REST_FRAMEWORK = {
-    # 👇 This tells Django to actively look for Bearer JWT Tokens!
+    # This tells Django to actively look for Bearer JWT Tokens!
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    
+    # 🚀 THE FIX: Add this new section for Global Permissions
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny', # Default permission
+        'accounts.permissions.IsNotBlocked',   # Our new block check permission
+    ),
+
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'otp_requests': '3/m', 
+        'otp_requests': '3/m',
     }
 }
