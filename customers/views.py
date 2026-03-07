@@ -46,30 +46,36 @@ class ToggleBlockCustomerView(views.APIView):
 # ==========================================
 # 3. EXPORT CUSTOMERS TO CSV (Google Sheets compatible)
 # ==========================================
-class ExportCustomersCSVView(views.APIView):
-    permission_classes = [IsAdminUser]
+class ExportCustomersCSV(APIView):
+    permission_classes = [IsAuthenticated] # Add admin permissions if needed
 
     def get(self, request):
-        # Create the HttpResponse object with the appropriate CSV header.
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="crunch_customers.csv"'
 
         writer = csv.writer(response)
-        # CSV Header Row
+        # Write the header row
         writer.writerow(['Customer ID', 'First Name', 'Last Name', 'Phone Number', 'Email', 'Joined Date', 'Account Status'])
 
-        users = User.objects.filter(is_superuser=False).order_by('-date_joined')
-        for user in users:
-            status_text = "Blocked" if user.is_blocked else "Active"
+        # Fetch all users with role 'user'
+        customers = User.objects.filter(role='user')
+
+        for user in customers:
+            status = "Blocked" if getattr(user, 'is_blocked', False) else "Active"
+            joined_date = user.date_joined.strftime('%Y-%m-%d') if user.date_joined else ""
+            
+            # 🚀 THE FIX: Wrapping the phone number in an Excel text formula
+            phone_number_text = f'="{user.phone_number}"' if user.phone_number else ""
+            
             # Write data rows
             writer.writerow([
-                user.id, 
-                user.first_name, 
-                user.last_name, 
-                user.phone_number, 
-                user.email, 
-                user.date_joined.strftime("%Y-%m-%d"), 
-                status_text
+                user.id,
+                user.first_name,
+                user.last_name,
+                phone_number_text,
+                user.email,
+                joined_date,
+                status
             ])
 
         return response
