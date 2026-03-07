@@ -138,6 +138,8 @@ SIMPLE_JWT = {
 
 
 AUTH_USER_MODEL = "accounts.User"
+TIME_ZONE = 'Asia/Kolkata'
+USE_TZ = True
 
 
 

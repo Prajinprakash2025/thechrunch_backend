@@ -16,6 +16,12 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     deliveryRadius = serializers.IntegerField(source='delivery_radius', required=False)
     footerDescription = serializers.CharField(source='footer_description', allow_blank=True, required=False)
 
+    # Automated Time & Manual Override fields
+    openingTime = serializers.TimeField(source='opening_time', required=False, format='%H:%M:%S', input_formats=['%H:%M:%S', '%H:%M'])
+    closingTime = serializers.TimeField(source='closing_time', required=False, format='%H:%M:%S', input_formats=['%H:%M:%S', '%H:%M'])
+    isManuallyOpen = serializers.BooleanField(source='is_manually_open', required=False)
+    isOpen = serializers.BooleanField(source='is_open', read_only=True)
+
     # Fields for nested data (workingHours and socials)
     workingHours = serializers.DictField(child=serializers.CharField(allow_blank=True), write_only=True, required=False)
     socials = serializers.DictField(child=serializers.CharField(allow_blank=True), write_only=True, required=False)
@@ -23,9 +29,10 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSetting
         fields = [
-            'appName', 'email', 'phone', 'address','type_address', 
+            'appName', 'email', 'phone', 'address', 'type_address', 
             'latitude', 'longitude', 
-            'deliveryRadius', 'footerDescription', 'workingHours', 'socials'
+            'deliveryRadius', 'footerDescription', 'workingHours', 'socials',
+            'openingTime', 'closingTime', 'isManuallyOpen', 'isOpen'
         ]
 
     # Convert backend data to frontend React format (GET)
