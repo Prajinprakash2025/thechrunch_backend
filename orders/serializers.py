@@ -1,16 +1,11 @@
 from rest_framework import serializers
 from .models import Cart, CartItem, Order, OrderItem
-# Import MenuItem from inventory to fetch the image
 from inventory.models import MenuItem 
 from accounts.serializers import AddressSerializer 
 
-# ==========================================
-# CART SERIALIZERS
-# ==========================================
 class CartItemSerializer(serializers.ModelSerializer):
     item_id = serializers.IntegerField(source='item.id', read_only=True)
     name = serializers.CharField(source='item.name', read_only=True)
-    # Django automatically builds the full image URL when context is passed
     image = serializers.ImageField(source='item.image', read_only=True) 
     actual_price = serializers.DecimalField(source='item.actual_price', max_digits=10, decimal_places=2, read_only=True)
     offer_price = serializers.DecimalField(source='item.offer_price', max_digits=10, decimal_places=2, read_only=True)
@@ -39,12 +34,7 @@ class CartSerializer(serializers.ModelSerializer):
             total += (price * cart_item.quantity)
         return total
 
-
-# ==========================================
-# ORDER SERIALIZERS
-# ==========================================
 class OrderItemSerializer(serializers.ModelSerializer):
-    # Named as 'image' so it can be easily accessed in React as 'item.image'
     image = serializers.ImageField(source='item.image', read_only=True)
     item_id = serializers.IntegerField(source='item.id', read_only=True)
 
@@ -54,12 +44,68 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    # To get the full address details instead of just the ID
     delivery_address = AddressSerializer(read_only=True) 
+    cancelled_by_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = [
             'id', 'delivery_address', 'subtotal', 'delivery_fee', 'total_amount',
-            'payment_method', 'payment_status', 'order_status', 'created_at', 'items'
+            'payment_method', 'payment_status', 'order_status', 'created_at', 
+            'cancelled_by_display', 'items'
         ]
+
+    def get_cancelled_by_display(self, obj):
+        if obj.order_status == 'CANCELLED' and obj.cancelled_by:
+            # If the customer cancelled their own order
+            if obj.cancelled_by == obj.user:
+                name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
+                return name if name else obj.cancelled_by.username
+            
+            # If Admin or Staff cancelled the order
+            role = getattr(obj.cancelled_by, 'role', '').lower()
+            if role == 'admin' or obj.cancelled_by.is_superuser:
+                return "Admin"
+            elif role == 'staff':
+                return "Staff"
+            else:
+                return "Admin"
+        return None
+
+class AdminOrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    delivery_address = AddressSerializer(read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.CharField(source='user.phone_number', read_only=True)
+    cancelled_by_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            'id', 'customer_name', 'customer_phone', 'delivery_address', 
+            'subtotal', 'delivery_fee', 'total_amount', 
+            'payment_method', 'payment_status', 'order_status', 
+            'created_at', 'cancelled_by_display', 'items'
+        ]
+
+    def get_customer_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return "Unknown Customer"
+
+    def get_cancelled_by_display(self, obj):
+        if obj.order_status == 'CANCELLED' and obj.cancelled_by:
+            # If the customer cancelled their own order
+            if obj.cancelled_by == obj.user:
+                name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
+                return name if name else obj.cancelled_by.username
+            
+            # If Admin or Staff cancelled the order
+            role = getattr(obj.cancelled_by, 'role', '').lower()
+            if role == 'admin' or obj.cancelled_by.is_superuser:
+                return "Admin"
+            elif role == 'staff':
+                return "Staff"
+            else:
+                return "Admin"
+        return None

@@ -1,14 +1,13 @@
 from rest_framework import views, status, generics
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-
-# Make sure these model imports match your exact app structure!
+from accounts.permissions import IsAdminOrStaff
 from .models import Cart, CartItem, Order, OrderItem
 from inventory.models import MenuItem 
 from accounts.models import Address
-from .serializers import CartSerializer, OrderSerializer
+from .serializers import CartSerializer, OrderSerializer, AdminOrderSerializer
 
 # ==========================================
 # 1. GET CART API (To load the cart page)
@@ -18,7 +17,6 @@ class CartDetailView(views.APIView):
 
     def get(self, request):
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        # 🌟 FIX: Added context so Django builds the full https:// domain for images!
         serializer = CartSerializer(cart, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -33,19 +31,17 @@ class CartUpdateView(views.APIView):
         cart, _ = Cart.objects.get_or_create(user=request.user)
         
         item_id = request.data.get('item_id')
-        action = request.data.get('action') # 'add', 'decrease', or 'remove'
+        action = request.data.get('action') 
 
         if not item_id or not action:
             return Response({"error": "item_id and action are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         menu_item = get_object_or_404(MenuItem, id=item_id)
         
-        # Get or create the item in the cart
         cart_item, created = CartItem.objects.get_or_create(cart=cart, item=menu_item)
         if created:
-            cart_item.quantity = 0 # Start at 0 so 'add' makes it 1
+            cart_item.quantity = 0 
 
-        # Perform the action
         if action == 'add':
             cart_item.quantity += 1
             cart_item.save()
@@ -60,7 +56,6 @@ class CartUpdateView(views.APIView):
         else:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 🌟 FIX: Added context so React gets the full image URLs after an update!
         serializer = CartSerializer(cart, context={'request': request})
         return Response({
             "message": f"Successfully performed {action}",
@@ -81,7 +76,6 @@ class CartMergeView(views.APIView):
         if not items_data:
             return Response({"message": "No items to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clear old backend cart to match local storage
         cart.items.all().delete()
 
         for data in items_data:
@@ -95,7 +89,6 @@ class CartMergeView(views.APIView):
                 quantity=quantity
             )
 
-        # 🌟 FIX: Added context so React gets the full image URLs after logging in!
         serializer = CartSerializer(cart, context={'request': request})
         return Response({
             "status": True, 
@@ -134,7 +127,7 @@ class PlaceOrderView(views.APIView):
             price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
             subtotal += (price * cart_item.quantity)
 
-        delivery_fee = 0 # Can be made dynamic later
+        delivery_fee = 0 
         total_amount = subtotal + delivery_fee
 
         order = Order.objects.create(
@@ -151,7 +144,6 @@ class PlaceOrderView(views.APIView):
         for cart_item in cart.items.all():
             price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
             
-            # 1. Create the permanent receipt (OrderItem)
             OrderItem.objects.create(
                 order=order,
                 item=cart_item.item,
@@ -160,15 +152,13 @@ class PlaceOrderView(views.APIView):
                 quantity=cart_item.quantity
             )
 
-            # 🌟 NEW FIX: Reduce the actual stock of the food item in the inventory!
             if cart_item.item.quantity >= cart_item.quantity:
                 cart_item.item.quantity -= cart_item.quantity
             else:
-                cart_item.item.quantity = 0 # Prevent negative stock just in case
+                cart_item.item.quantity = 0 
             
-            cart_item.item.save() # Save the new stock level to the database!
+            cart_item.item.save() 
 
-        # Clear cart after placing order
         cart.items.all().delete()
 
         return Response({
@@ -184,39 +174,92 @@ class OrderListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return orders belonging to the logged-in user, newest first
         return Order.objects.filter(user=self.request.user).order_by('-created_at')
 
 
 # ==========================================
 # 6. CANCEL ORDER API 
 # ==========================================
+# ==========================================
+# 6. CANCEL ORDER API (Customer Side)
+# ==========================================
 class CancelOrderView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request, order_id):
-        # Fetch the order belonging to the logged-in user
         order = get_object_or_404(Order, id=order_id, user=request.user)
 
-        # 1. Check if the order can be cancelled
+        # Condition: Customer can ONLY cancel if it is strictly 'PLACED'
         if order.order_status != 'PLACED':
             return Response(
-                {"error":  "Sorry, this order can no longer be cancelled."}, 
+                {"error":  "Sorry, this order is already being processed and can no longer be cancelled."}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 2. Update order status to CANCELLED
+        # Mark as Cancelled and record WHO cancelled it (The Customer)
         order.order_status = 'CANCELLED'
+        order.cancelled_by = request.user
         order.save()
 
-        # 3. Return the items back to the inventory stock
+        # Return the items back to the inventory stock
         for order_item in order.items.all():
-            if order_item.item: # Check if the MenuItem still exists in the database
+            if order_item.item: 
                 order_item.item.quantity += order_item.quantity
                 order_item.item.save()
 
         return Response(
             {"message": "Order cancelled successfully"}, 
+            status=status.HTTP_200_OK
+        )
+
+# ==========================================
+# 7. ADMIN: LIST ORDERS API (Dashboard Filters)
+# ==========================================
+class AdminOrderListView(generics.ListAPIView):
+    serializer_class = AdminOrderSerializer
+    permission_classes = [IsAdminOrStaff]
+    def get_queryset(self):
+        queryset = Order.objects.all().order_by('-created_at')
+        
+        order_status = self.request.query_params.get('status', None)
+        
+        if order_status:
+            if order_status == 'HISTORY':
+                queryset = queryset.filter(order_status__in=['DELIVERED', 'CANCELLED'])
+            else:
+                queryset = queryset.filter(order_status=order_status)
+                
+        return queryset
+
+# ==========================================
+# 8. ADMIN: UPDATE ORDER STATUS API
+# ==========================================
+class AdminOrderStatusUpdateView(views.APIView):
+    permission_classes = [IsAdminOrStaff]   
+    @transaction.atomic
+    def patch(self, request, order_id):
+        order = get_object_or_404(Order, id=order_id)
+        new_status = request.data.get('status')
+        
+        valid_statuses = ['PLACED', 'PREPARING', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED']
+        
+        if new_status not in valid_statuses:
+            return Response({"error": "Invalid status provided."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # If the Admin/Staff cancels the order, record it and return stock
+        if new_status == 'CANCELLED' and order.order_status != 'CANCELLED':
+            order.cancelled_by = request.user
+            # Return stock logic for admin cancellation
+            for order_item in order.items.all():
+                if order_item.item: 
+                    order_item.item.quantity += order_item.quantity
+                    order_item.item.save()
+
+        order.order_status = new_status
+        order.save()
+        
+        return Response(
+            {"message": f"Order #{order.id} status updated to {new_status}."}, 
             status=status.HTTP_200_OK
         )
