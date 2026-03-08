@@ -15,7 +15,7 @@ from .serializers import CategorySerializer, MenuItemSerializer
 # CUSTOM PAGINATION
 # ==========================================
 class AdminPagination(PageNumberPagination):
-    page_size = 12
+    page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
 
@@ -118,13 +118,17 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
         search_query = self.request.query_params.get('search', '')
         category_id = self.request.query_params.get('category', '')
         section_name = self.request.query_params.get('section', '')
+        low_stock = self.request.query_params.get('low_stock', '')
         
-        # 3. Apply Text Search (Checks Name, Description, AND Category Name!)
+        # 🌟 NEW: Look for the available parameter
+        is_available_param = self.request.query_params.get('available', '')
+        
+        # 3. Apply Text Search
         if search_query:
             queryset = queryset.filter(
                 Q(name__icontains=search_query) | 
                 Q(description__icontains=search_query) |
-                Q(category__name__icontains=search_query)  # <-- ADDED THIS LINE!
+                Q(category__name__icontains=search_query) 
             )
             
         # 4. Apply Category Filter
@@ -135,8 +139,19 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
         if section_name and str(section_name).upper() != 'ALL':
             queryset = queryset.filter(section__iexact=section_name)
             
+        # 6. Apply Low Stock Filter (Less than 10)
+        if low_stock and str(low_stock).lower() == 'true':
+            queryset = queryset.filter(quantity__lt=10)
+            
+        # 🌟 NEW: Apply Availability Filter (True or False)
+        if is_available_param:
+            if str(is_available_param).lower() == 'true':
+                queryset = queryset.filter(is_available=True)
+            elif str(is_available_param).lower() == 'false':
+                queryset = queryset.filter(is_available=False)
+            
         return queryset
-
+    
 class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemSerializer
