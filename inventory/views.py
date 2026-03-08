@@ -119,12 +119,15 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
         category_id = self.request.query_params.get('category', '')
         section_name = self.request.query_params.get('section', '')
         
+        # 🌟 NEW: Look for the low_stock parameter from React
+        low_stock = self.request.query_params.get('low_stock', '')
+        
         # 3. Apply Text Search (Checks Name, Description, AND Category Name!)
         if search_query:
             queryset = queryset.filter(
                 Q(name__icontains=search_query) | 
                 Q(description__icontains=search_query) |
-                Q(category__name__icontains=search_query)  # <-- ADDED THIS LINE!
+                Q(category__name__icontains=search_query) 
             )
             
         # 4. Apply Category Filter
@@ -134,6 +137,11 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
         # 5. Apply Section Filter
         if section_name and str(section_name).upper() != 'ALL':
             queryset = queryset.filter(section__iexact=section_name)
+            
+        # 🌟 NEW: Apply Low Stock Filter (Less than 10)
+        if low_stock and str(low_stock).lower() == 'true':
+            # `quantity__lt=10` means "Quantity is Less Than 10"
+            queryset = queryset.filter(quantity__lt=10)
             
         return queryset
 
