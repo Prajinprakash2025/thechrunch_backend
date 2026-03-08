@@ -13,7 +13,7 @@ class SiteSettingSerializer(serializers.ModelSerializer):
     latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
     longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
     
-    deliveryRadius = serializers.IntegerField(source='delivery_radius', required=False)
+    deliveryRadius = serializers.FloatField(source='delivery_radius', required=False)
     footerDescription = serializers.CharField(source='footer_description', allow_blank=True, required=False)
 
     # Automated Time & Manual Override fields
