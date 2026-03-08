@@ -13,7 +13,7 @@ class SiteSetting(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     
-    delivery_radius = models.PositiveIntegerField(default=0, help_text="In KM")
+    delivery_radius = models.FloatField(default=0, help_text="In KM")
 
     # --- Footer Content & Display Hours ---
     footer_description = models.TextField(blank=True, null=True, default="")
