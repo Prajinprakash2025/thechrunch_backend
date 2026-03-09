@@ -32,6 +32,9 @@ class CartUpdateView(views.APIView):
         
         item_id = request.data.get('item_id')
         action = request.data.get('action') 
+        
+        # 🚀 THE FIX: Get the quantity from frontend request (Default is 1 if not provided)
+        quantity = int(request.data.get('quantity', 1))
 
         if not item_id or not action:
             return Response({"error": "item_id and action are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -43,11 +46,13 @@ class CartUpdateView(views.APIView):
             cart_item.quantity = 0 
 
         if action == 'add':
-            cart_item.quantity += 1
+            # 🚀 THE FIX: Add the exact quantity requested by frontend
+            cart_item.quantity += quantity
             cart_item.save()
         elif action == 'decrease':
-            if cart_item.quantity > 1:
-                cart_item.quantity -= 1
+            # 🚀 THE FIX: Decrease by the exact quantity requested
+            if cart_item.quantity > quantity:
+                cart_item.quantity -= quantity
                 cart_item.save()
             else:
                 cart_item.delete()
