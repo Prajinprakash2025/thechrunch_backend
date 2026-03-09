@@ -3,6 +3,9 @@ from .models import Cart, CartItem, Order, OrderItem
 from inventory.models import MenuItem 
 from accounts.serializers import AddressSerializer 
 
+# ==========================================
+# CART SERIALIZERS
+# ==========================================
 class CartItemSerializer(serializers.ModelSerializer):
     item_id = serializers.IntegerField(source='item.id', read_only=True)
     name = serializers.CharField(source='item.name', read_only=True)
@@ -34,6 +37,10 @@ class CartSerializer(serializers.ModelSerializer):
             total += (price * cart_item.quantity)
         return total
 
+
+# ==========================================
+# ORDER SERIALIZERS (Customer Side)
+# ==========================================
 class OrderItemSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(source='item.image', read_only=True)
     item_id = serializers.IntegerField(source='item.id', read_only=True)
@@ -62,16 +69,22 @@ class OrderSerializer(serializers.ModelSerializer):
                 name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
                 return name if name else obj.cancelled_by.username
             
-            # If Admin or Staff cancelled the order
-            role = getattr(obj.cancelled_by, 'role', '').lower()
-            if role == 'admin' or obj.cancelled_by.is_superuser:
+            # The Fix: Safely get the role even if it is None in the database
+            role = getattr(obj.cancelled_by, 'role', None)
+            role_name = role.lower() if role else ''
+            
+            if role_name == 'admin' or obj.cancelled_by.is_superuser:
                 return "Admin"
-            elif role == 'staff':
+            elif role_name == 'staff':
                 return "Staff"
             else:
                 return "Admin"
         return None
 
+
+# ==========================================
+# ADMIN SERIALIZERS (Dashboard Side)
+# ==========================================
 class AdminOrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     delivery_address = AddressSerializer(read_only=True)
@@ -100,11 +113,13 @@ class AdminOrderSerializer(serializers.ModelSerializer):
                 name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
                 return name if name else obj.cancelled_by.username
             
-            # If Admin or Staff cancelled the order
-            role = getattr(obj.cancelled_by, 'role', '').lower()
-            if role == 'admin' or obj.cancelled_by.is_superuser:
+            # The Fix: Safely get the role even if it is None in the database
+            role = getattr(obj.cancelled_by, 'role', None)
+            role_name = role.lower() if role else ''
+            
+            if role_name == 'admin' or obj.cancelled_by.is_superuser:
                 return "Admin"
-            elif role == 'staff':
+            elif role_name == 'staff':
                 return "Staff"
             else:
                 return "Admin"
