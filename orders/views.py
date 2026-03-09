@@ -225,7 +225,7 @@ class AdminOrderListView(generics.ListAPIView):
     serializer_class = AdminOrderSerializer
     permission_classes = [IsAdminOrStaff]
     def get_queryset(self):
-        queryset = Order.objects.all().order_by('-created_at')
+        queryset = Order.objects.all().order_by('created_at')
         
         order_status = self.request.query_params.get('status', None)
         
@@ -268,3 +268,27 @@ class AdminOrderStatusUpdateView(views.APIView):
             {"message": f"Order #{order.id} status updated to {new_status}."}, 
             status=status.HTTP_200_OK
         )
+    
+
+# ==========================================
+# 9. ADMIN: GET ORDER STATS (For Tab Counts)
+# ==========================================
+class AdminOrderStatsView(views.APIView):
+    # Use IsAdminOrStaff if you updated your permissions, otherwise IsAdminUser
+    permission_classes = [IsAdminOrStaff] 
+
+    def get(self, request):
+        # Count orders based on their current status
+        placed_count = Order.objects.filter(order_status='PLACED').count()
+        preparing_count = Order.objects.filter(order_status='PREPARING').count()
+        on_the_way_count = Order.objects.filter(order_status='ON_THE_WAY').count()
+        
+        # History includes both delivered and cancelled orders
+        history_count = Order.objects.filter(order_status__in=['DELIVERED', 'CANCELLED']).count()
+
+        return Response({
+            "new_orders": placed_count,
+            "preparing": preparing_count,
+            "on_the_way": on_the_way_count,
+            "history": history_count
+        }, status=status.HTTP_200_OK)

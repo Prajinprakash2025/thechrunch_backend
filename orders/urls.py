@@ -21,6 +21,9 @@ urlpatterns = [
     # ==========================================
     # GET /api/orders/admin/?status=PLACED
     path('admin/', views.AdminOrderListView.as_view(), name='admin-order-list'),
+
+    #  GET /api/orders/admin/stats/ (For Tab Counts)
+    path('admin/stats/', views.AdminOrderStatsView.as_view(), name='admin-order-stats'),
     
     # PATCH /api/orders/admin/<order_id>/status/
     path('admin/<int:order_id>/status/', views.AdminOrderStatusUpdateView.as_view(), name='admin-order-status-update'),
