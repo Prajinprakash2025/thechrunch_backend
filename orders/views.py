@@ -4,15 +4,20 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from accounts.permissions import IsAdminOrStaff
+from accounts.models import User, Address
 from .models import Cart, CartItem, Order, OrderItem
 from inventory.models import MenuItem 
-from accounts.models import Address
 from .serializers import CartSerializer, OrderSerializer, AdminOrderSerializer
-from notifications.utils import send_telegram_order_notification, send_telegram_cancellation_notification
+from notifications.utils import (
+    send_telegram_order_notification, 
+    send_telegram_cancellation_notification,
+    send_fcm_notification
+)
 
 # ==========================================
-# 1. GET CART API
+# 1. CART MANAGEMENT APIs
 # ==========================================
+
 class CartDetailView(views.APIView):
     permission_classes = [IsAuthenticated]
 
@@ -22,9 +27,6 @@ class CartDetailView(views.APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-# ==========================================
-# 2. UPDATE CART API (Add/Decrease/Remove)
-# ==========================================
 class CartUpdateView(views.APIView):
     permission_classes = [IsAuthenticated]
 
@@ -61,9 +63,6 @@ class CartUpdateView(views.APIView):
         return Response({"message": f"Successfully performed {action}", "cart_data": serializer.data}, status=status.HTTP_200_OK)
 
 
-# ==========================================
-# 3. MERGE CART API (LocalStorage Sync)
-# ==========================================
 class CartMergeView(views.APIView):
     permission_classes = [IsAuthenticated] 
 
@@ -86,8 +85,9 @@ class CartMergeView(views.APIView):
 
 
 # ==========================================
-# 4. PLACE FINAL ORDER (With Telegram Alert)
+# 2. ORDER PLACEMENT (With Telegram & FCM)
 # ==========================================
+
 class PlaceOrderView(views.APIView):
     permission_classes = [IsAuthenticated]
 
@@ -101,13 +101,12 @@ class PlaceOrderView(views.APIView):
 
         address_id = request.data.get('address_id')
         payment_method = request.data.get('payment_method', 'COD')
-
         delivery_address = get_object_or_404(Address, id=address_id, user=user)
 
-        subtotal = 0
-        for cart_item in cart.items.all():
-            price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
-            subtotal += (price * cart_item.quantity)
+        subtotal = sum(
+            (item.item.offer_price if item.item.offer_price else item.item.actual_price) * item.quantity 
+            for item in cart.items.all()
+        )
 
         order = Order.objects.create(
             user=user, delivery_address=delivery_address, subtotal=subtotal,
@@ -121,7 +120,7 @@ class PlaceOrderView(views.APIView):
                 order=order, item=cart_item.item, item_name=cart_item.item.name,
                 price=price, quantity=cart_item.quantity
             )
-            # Update Inventory
+            # Inventory Management
             if cart_item.item.quantity >= cart_item.quantity:
                 cart_item.item.quantity -= cart_item.quantity
             else:
@@ -130,18 +129,34 @@ class PlaceOrderView(views.APIView):
 
         cart.items.all().delete()
 
-        # Send Telegram Alert
+        # --- NOTIFICATIONS ---
+        
+        # 1. Send Telegram Alert
         try:
             send_telegram_order_notification(order)
         except:
             pass
 
+        # 2. Send FCM Push Notification to Admin/Staff
+        try:
+            admin_staff_users = User.objects.filter(is_staff=True)
+            for admin in admin_staff_users:
+                send_fcm_notification(
+                    user_id=admin.id,
+                    title="New Order Received! 🍔",
+                    body=f"Order #{order.id} from {order.user.first_name}. Total: ₹{order.total_amount}",
+                    data={"order_id": str(order.id), "type": "NEW_ORDER"}
+                )
+        except Exception as e:
+            print(f"FCM Notification Error: {e}")
+
         return Response({"message": "Order placed successfully!", "order_id": order.id}, status=status.HTTP_201_CREATED)
 
 
 # ==========================================
-# 5. USER ORDER HISTORY
+# 3. USER ORDER HISTORY & CANCELLATION
 # ==========================================
+
 class OrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
@@ -150,9 +165,6 @@ class OrderListView(generics.ListAPIView):
         return Order.objects.filter(user=self.request.user).order_by('-created_at')
 
 
-# ==========================================
-# 6. CANCEL ORDER (Customer Side + Alert)
-# ==========================================
 class CancelOrderView(views.APIView):
     permission_classes = [IsAuthenticated]
 
@@ -173,7 +185,7 @@ class CancelOrderView(views.APIView):
                 order_item.item.quantity += order_item.quantity
                 order_item.item.save()
 
-        # Send Telegram Alert
+        # Send Telegram Cancellation Alert (No FCM as requested)
         try:
             send_telegram_cancellation_notification(order)
         except:
@@ -183,14 +195,15 @@ class CancelOrderView(views.APIView):
 
 
 # ==========================================
-# 7. ADMIN: LIST ORDERS (FIFO Listing)
+# 4. ADMIN DASHBOARD APIs
 # ==========================================
+
 class AdminOrderListView(generics.ListAPIView):
+    """Lists orders in FIFO order (Oldest first) for kitchen management"""
     serializer_class = AdminOrderSerializer
     permission_classes = [IsAdminOrStaff]
     
     def get_queryset(self):
-        # FIFO: Oldest orders at top for kitchen
         queryset = Order.objects.all().order_by('created_at')
         status_param = self.request.query_params.get('status', None)
         
@@ -202,9 +215,6 @@ class AdminOrderListView(generics.ListAPIView):
         return queryset
 
 
-# ==========================================
-# 8. ADMIN: UPDATE ORDER STATUS
-# ==========================================
 class AdminOrderStatusUpdateView(views.APIView):
     permission_classes = [IsAdminOrStaff]   
     
@@ -225,10 +235,8 @@ class AdminOrderStatusUpdateView(views.APIView):
         return Response({"message": f"Order updated to {new_status}"}, status=status.HTTP_200_OK)
     
 
-# ==========================================
-# 9. ADMIN: GET ORDER STATS (Dashboard Counts)
-# ==========================================
 class AdminOrderStatsView(views.APIView):
+    """Returns counts for the Admin Dashboard tabs"""
     permission_classes = [IsAdminOrStaff] 
 
     def get(self, request):

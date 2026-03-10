@@ -1,6 +1,9 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import os
+import firebase_admin
+from firebase_admin import credentials
 
 # 1. Define BASE_DIR first
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -169,9 +172,22 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ==========================================
+# FIREBASE FCM SETUP
+# ==========================================
+# Ensure firebase-key.json is located in your main project folder
+FIREBASE_KEY_PATH = os.path.join(BASE_DIR, 'firebase-key.json')
+
+# Initialize Firebase only once to prevent errors
+if not firebase_admin._apps:
+    try:
+        cred = credentials.Certificate(FIREBASE_KEY_PATH)
+        firebase_admin.initialize_app(cred)
+        print("Firebase initialized successfully!")
+    except Exception as e:
+        print(f"Error initializing Firebase: {e}")
 
 
-# settings.py
 
 REST_FRAMEWORK = {
     # This tells Django to actively look for Bearer JWT Tokens!
