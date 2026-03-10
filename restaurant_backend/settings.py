@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'site_settings',
     'orders',
     'customers',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -163,6 +164,8 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_USER')       
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASS')  
 
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

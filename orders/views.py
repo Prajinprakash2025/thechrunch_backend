@@ -8,6 +8,7 @@ from .models import Cart, CartItem, Order, OrderItem
 from inventory.models import MenuItem 
 from accounts.models import Address
 from .serializers import CartSerializer, OrderSerializer, AdminOrderSerializer
+from notifications.utils import send_telegram_order_notification
 
 # ==========================================
 # 1. GET CART API (To load the cart page)
@@ -166,6 +167,13 @@ class PlaceOrderView(views.APIView):
 
         cart.items.all().delete()
 
+        # Send Telegram Notification right after the order is saved
+        try:
+            send_telegram_order_notification(order)
+        except Exception as e:
+            # We catch the exception so that even if telegram fails, the order is still placed
+            print(f"Telegram notification failed: {e}")
+
         return Response({
             "message": "Order placed successfully!",
             "order_id": order.id
@@ -182,9 +190,6 @@ class OrderListView(generics.ListAPIView):
         return Order.objects.filter(user=self.request.user).order_by('-created_at')
 
 
-# ==========================================
-# 6. CANCEL ORDER API 
-# ==========================================
 # ==========================================
 # 6. CANCEL ORDER API (Customer Side)
 # ==========================================
@@ -224,6 +229,7 @@ class CancelOrderView(views.APIView):
 class AdminOrderListView(generics.ListAPIView):
     serializer_class = AdminOrderSerializer
     permission_classes = [IsAdminOrStaff]
+    
     def get_queryset(self):
         queryset = Order.objects.all().order_by('created_at')
         
@@ -242,6 +248,7 @@ class AdminOrderListView(generics.ListAPIView):
 # ==========================================
 class AdminOrderStatusUpdateView(views.APIView):
     permission_classes = [IsAdminOrStaff]   
+    
     @transaction.atomic
     def patch(self, request, order_id):
         order = get_object_or_404(Order, id=order_id)
