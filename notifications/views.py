@@ -15,18 +15,14 @@ class SaveFCMTokenView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 1. If this exact token belongs to someone else (e.g., they logged out), remove it first
+        # 1. Remove this token if it exists for any other user
         FCMDevice.objects.filter(fcm_token=token).exclude(user=request.user).delete()
 
-        # 2. Update the CURRENT user's existing token, or create a new row if they don't have one
+        # 2. Update or create the token for the current logged-in user
         device, created = FCMDevice.objects.update_or_create(
-            user=request.request.user,
+            user=request.user,
             defaults={'fcm_token': token}
         )
 
-        if created:
-            message = "FCM token saved successfully"
-        else:
-            message = "FCM token updated successfully"
-
+        message = "FCM token saved successfully" if created else "FCM token updated successfully"
         return Response({"message": message}, status=status.HTTP_200_OK)

@@ -8,34 +8,39 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 # ==========================================
-# 1. FCM PUSH NOTIFICATION (New Order Only)
+# 1. FCM PUSH NOTIFICATION (Admin & Staff Only)
 # ==========================================
-def send_fcm_notification(user_id, title, body, data=None):
+def send_fcm_notification(exclude_user_id, title, body, data=None):
     """
-    Sends a Push Notification to a specific user's device via FCM.
+    Sends Push Notifications to all Admin/Staff members, 
+    excluding the user who triggered the action (order creator).
     """
     try:
-        # Get the saved FCM token for this user
-        device = FCMDevice.objects.get(user=user_id)
-        registration_token = device.fcm_token
+        # Get all active FCM tokens for Admin and Staff, excluding the person who placed the order
+        admin_staff_devices = FCMDevice.objects.filter(
+            user__is_staff=True
+        ).exclude(user=exclude_user_id)
 
-        # Create the message payload
-        message = messaging.Message(
+        if not admin_staff_devices.exists():
+            print("No admin or staff devices found to notify.")
+            return None
+
+        tokens = [device.fcm_token for device in admin_staff_devices]
+
+        # Use Multicast to send to multiple tokens at once
+        message = messaging.MulticastMessage(
             notification=messaging.Notification(
                 title=title,
                 body=body,
             ),
-            data=data or {}, 
-            token=registration_token,
+            data=data or {},
+            tokens=tokens,
         )
 
-        # Send the message to Firebase
-        response = messaging.send(message)
-        print(f"Successfully sent FCM message: {response}")
+        response = messaging.send_multicast(message)
+        print(f"Successfully sent FCM messages. Success count: {response.success_count}")
         return response
 
-    except FCMDevice.DoesNotExist:
-        print(f"No FCM token found for user {user_id}")
     except Exception as e:
         print(f"Error sending FCM notification: {e}")
     return None
