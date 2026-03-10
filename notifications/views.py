@@ -15,12 +15,13 @@ class SaveFCMTokenView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Look for the exact token first. 
-        # If it exists, update the user to the current logged-in user.
-        # If it does not exist, create a new record.
+        # 1. If this exact token belongs to someone else (e.g., they logged out), remove it first
+        FCMDevice.objects.filter(fcm_token=token).exclude(user=request.user).delete()
+
+        # 2. Update the CURRENT user's existing token, or create a new row if they don't have one
         device, created = FCMDevice.objects.update_or_create(
-            fcm_token=token,
-            defaults={'user': request.user}
+            user=request.request.user,
+            defaults={'fcm_token': token}
         )
 
         if created:
