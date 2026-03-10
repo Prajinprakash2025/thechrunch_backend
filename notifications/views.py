@@ -1,6 +1,3 @@
-from django.shortcuts import render
-
-# Create your views here.
 from rest_framework import views, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -18,10 +15,12 @@ class SaveFCMTokenView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Create a new record or update the existing token for the user
+        # Look for the exact token first. 
+        # If it exists, update the user to the current logged-in user.
+        # If it does not exist, create a new record.
         device, created = FCMDevice.objects.update_or_create(
-            user=request.user,
-            defaults={'fcm_token': token}
+            fcm_token=token,
+            defaults={'user': request.user}
         )
 
         if created:
