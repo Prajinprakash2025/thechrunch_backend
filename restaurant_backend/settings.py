@@ -175,17 +175,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ==========================================
 # FIREBASE FCM SETUP
 # ==========================================
-# Ensure firebase-key.json is located in your main project folder
-FIREBASE_KEY_PATH = os.path.join(BASE_DIR, 'firebase-key.json')
+# Ensure the firebase-key.json file is in your BASE_DIR (same folder as manage.py)
+# If your filename is firebase-key.json.json, change it below.
+FIREBASE_KEY_PATH = os.path.join(BASE_DIR, 'firebase-key.json.json')
 
-# Initialize Firebase only once to prevent errors
+# Initialize Firebase only if it hasn't been initialized already
 if not firebase_admin._apps:
     try:
         cred = credentials.Certificate(FIREBASE_KEY_PATH)
         firebase_admin.initialize_app(cred)
-        print("Firebase initialized successfully!")
+        print("🔥 Firebase initialized successfully!")
     except Exception as e:
-        print(f"Error initializing Firebase: {e}")
+        print(f"⚠️ Error initializing Firebase: {e}")
 
 
 
