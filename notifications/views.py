@@ -10,15 +10,12 @@ class SaveFCMTokenView(views.APIView):
         token = request.data.get('fcm_token')
 
         if not token:
-            return Response(
-                {"error": "FCM token is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "FCM token is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Remove this token if it exists for any other user
+        # Remove token if it belongs to another user
         FCMDevice.objects.filter(fcm_token=token).exclude(user=request.user).delete()
 
-        # 2. Update or create the token for the current logged-in user
+        # Update or create for the current user (Fixed request.user)
         device, created = FCMDevice.objects.update_or_create(
             user=request.user,
             defaults={'fcm_token': token}
