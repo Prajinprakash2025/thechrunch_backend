@@ -199,19 +199,24 @@ class CancelOrderView(views.APIView):
 # ==========================================
 
 class AdminOrderListView(generics.ListAPIView):
-    """Lists orders in FIFO order (Oldest first) for kitchen management"""
+    """Lists orders for kitchen management. History shows latest first, others show oldest first."""
     serializer_class = AdminOrderSerializer
     permission_classes = [IsAdminOrStaff]
     
     def get_queryset(self):
-        queryset = Order.objects.all().order_by('created_at')
         status_param = self.request.query_params.get('status', None)
+        
+        # Default order is oldest first (FIFO for Kitchen)
+        queryset = Order.objects.all().order_by('created_at')
         
         if status_param:
             if status_param == 'HISTORY':
-                queryset = queryset.filter(order_status__in=['DELIVERED', 'CANCELLED'])
+                queryset = Order.objects.filter(
+                    order_status__in=['DELIVERED', 'CANCELLED']
+                ).order_by('-created_at')
             else:
                 queryset = queryset.filter(order_status=status_param)
+                
         return queryset
 
 
