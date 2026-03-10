@@ -8,6 +8,7 @@ from accounts.models import User, Address
 from .models import Cart, CartItem, Order, OrderItem
 from inventory.models import MenuItem 
 from .serializers import CartSerializer, OrderSerializer, AdminOrderSerializer
+from rest_framework.pagination import PageNumberPagination
 from notifications.utils import (
     send_telegram_order_notification, 
     send_telegram_cancellation_notification,
@@ -198,26 +199,49 @@ class CancelOrderView(views.APIView):
 # 4. ADMIN DASHBOARD APIs
 # ==========================================
 
+# 1. Custom Pagination Class
+class HistoryPagination(PageNumberPagination):
+    page_size = 10  # Set the number of items per page here
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+# 2. Updated AdminOrderListView
 class AdminOrderListView(generics.ListAPIView):
-    """Lists orders for kitchen management. History shows latest first, others show oldest first."""
+    """Lists orders. History shows latest first with pagination, others show oldest first without pagination."""
     serializer_class = AdminOrderSerializer
     permission_classes = [IsAdminOrStaff]
+    pagination_class = HistoryPagination 
     
     def get_queryset(self):
         status_param = self.request.query_params.get('status', None)
         
-        # Default order is oldest first (FIFO for Kitchen)
-        queryset = Order.objects.all().order_by('created_at')
+        if status_param == 'HISTORY':
+            # For HISTORY: Latest orders first (Descending order)
+            return Order.objects.filter(
+                order_status__in=['DELIVERED', 'CANCELLED']
+            ).order_by('-created_at')
         
+        # For others (NEW, PREPARING): Oldest orders first (FIFO)
+        queryset = Order.objects.all().order_by('created_at')
         if status_param:
-            if status_param == 'HISTORY':
-                queryset = Order.objects.filter(
-                    order_status__in=['DELIVERED', 'CANCELLED']
-                ).order_by('-created_at')
-            else:
-                queryset = queryset.filter(order_status=status_param)
-                
+            queryset = queryset.filter(order_status=status_param)
+            
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        status_param = request.query_params.get('status', None)
+
+        # Apply pagination ONLY for the HISTORY tab
+        if status_param == 'HISTORY':
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+        # For other tabs, return all data without pagination
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class AdminOrderStatusUpdateView(views.APIView):
