@@ -1,10 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import CustomUser
-from orders.models import Order 
+from orders.models import Order
 
 User = get_user_model()
-
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
