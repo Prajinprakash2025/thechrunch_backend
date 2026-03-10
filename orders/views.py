@@ -201,7 +201,7 @@ class CancelOrderView(views.APIView):
 
 # 1. Custom Pagination Class
 class HistoryPagination(PageNumberPagination):
-    page_size = 10  # Set the number of items per page here
+    page_size = 20  # Set the number of items per page here
     page_size_query_param = 'page_size'
     max_page_size = 50
 
@@ -212,16 +212,35 @@ class AdminOrderListView(generics.ListAPIView):
     permission_classes = [IsAdminOrStaff]
     pagination_class = HistoryPagination 
     
+    # 2. Updated AdminOrderListView
+class AdminOrderListView(generics.ListAPIView):
+    """Lists orders. History shows latest first with pagination & search."""
+    serializer_class = AdminOrderSerializer
+    permission_classes = [IsAdminOrStaff]
+    pagination_class = HistoryPagination 
+    
     def get_queryset(self):
         status_param = self.request.query_params.get('status', None)
+        search_order_id = self.request.query_params.get('order_id', None)
         
         if status_param == 'HISTORY':
-            # For HISTORY: Latest orders first (Descending order)
-            return Order.objects.filter(
+            # Base queryset for history: Latest first
+            queryset = Order.objects.filter(
                 order_status__in=['DELIVERED', 'CANCELLED']
             ).order_by('-created_at')
+            
+            # Apply search filter if 'order_id' is provided in the URL
+            if search_order_id:
+                try:
+                    # Filter by exactly matching the order ID
+                    queryset = queryset.filter(id=int(search_order_id))
+                except ValueError:
+                    # If the search input is not a valid number (e.g., text), return empty list
+                    queryset = queryset.none()
+                    
+            return queryset
         
-        # For others (NEW, PREPARING): Oldest orders first (FIFO)
+        # For other tabs (NEW, PREPARING): Oldest first (FIFO)
         queryset = Order.objects.all().order_by('created_at')
         if status_param:
             queryset = queryset.filter(order_status=status_param)
