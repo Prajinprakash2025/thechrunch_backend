@@ -25,6 +25,7 @@ urlpatterns = [
     # 🌟 NEW APP FOR MANAGING CUSTOMERS
     path('api/customers/', include('customers.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/dashboard/', include('dashboard.urls')),
     ]
 
 if settings.DEBUG:

@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'orders',
     'customers',
     'notifications',
+    'dashboard',
 ]
 
 MIDDLEWARE = [
