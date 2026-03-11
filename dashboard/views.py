@@ -13,26 +13,26 @@ class AdminDashboardView(APIView):
     permission_classes = [IsAdminOrStaff]
 
     def get(self, request):
-        today = timezone.now()
+        # Using localdate() to ensure we get the correct date in IST
+        today = timezone.localdate()
 
         # 1. TOP STATS
         total_orders = Order.objects.count()
-        # Changed 'status' to 'order_status' based on your model
         pending_dispatch = Order.objects.filter(order_status__in=['PLACED', 'PREPARING']).count()
         active_customers = User.objects.filter(role='user', is_blocked=False).count()
-        # Changed 'status' to 'order_status' and using 'DELIVERED'
         total_revenue = Order.objects.filter(order_status='DELIVERED').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
         # 2. WEEKLY ORDER VOLUME (Monday to Sunday)
         weekly_volume = []
-        start_of_week = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Calculate start of the week based on localdate
+        start_of_week = today - timedelta(days=today.weekday())
         
         for i in range(7):
-            day_start = start_of_week + timedelta(days=i)
-            day_end = day_start + timedelta(days=1)
-            day_orders = Order.objects.filter(created_at__gte=day_start, created_at__lt=day_end).count()
+            current_day = start_of_week + timedelta(days=i)
+            # Filtering by exact date instead of datetime ranges for accuracy with localdate
+            day_orders = Order.objects.filter(created_at__date=current_day).count()
             weekly_volume.append({
-                "day": day_start.strftime("%a"),
+                "day": current_day.strftime("%a"),
                 "orders": day_orders
             })
 
@@ -51,7 +51,6 @@ class AdminDashboardView(APIView):
         attention_needed = [{"item": item['item_name'], "issue": "Low Demand"} for item in lowest_items]
 
         # 5. ACTIVE DISPATCH
-        # Changed 'status' to 'order_status' and using 'ON_THE_WAY'
         active_orders = Order.objects.filter(order_status='ON_THE_WAY').order_by('-created_at')[:5]
         active_dispatch = [
             {
