@@ -46,7 +46,7 @@ class AdminDashboardView(APIView):
         # 4. ATTENTION NEEDED
         lowest_items = OrderItem.objects.values('item_name').annotate(
             total_sold=Sum('quantity')
-        ).order_by('total_sold')[:4]
+        ).order_by('total_sold')[:6]
         
         attention_needed = [{"item": item['item_name'], "issue": "Low Demand"} for item in lowest_items]
 
