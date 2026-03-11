@@ -224,10 +224,10 @@ class AdminOrderListView(generics.ListAPIView):
         search_order_id = self.request.query_params.get('order_id', None)
         
         if status_param == 'HISTORY':
-            # Base queryset for history: Latest first
+            # Base queryset for history: Latest updated first
             queryset = Order.objects.filter(
                 order_status__in=['DELIVERED', 'CANCELLED']
-            ).order_by('-created_at')
+            ).order_by('-updated_at')  # <--- IVIDE MATRAMAANU CHANGE VANNATHU
             
             # Apply search filter if 'order_id' is provided in the URL
             if search_order_id:
@@ -261,7 +261,8 @@ class AdminOrderListView(generics.ListAPIView):
         # For other tabs, return all data without pagination
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
+    
+    
 
 class AdminOrderStatusUpdateView(views.APIView):
     permission_classes = [IsAdminOrStaff]   
