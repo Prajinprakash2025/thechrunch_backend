@@ -6,16 +6,17 @@ from django.utils import timezone
 from datetime import timedelta
 from orders.models import Order
 from notifications.models import AdminNotification
+from rest_framework import status
 
 class RevenueDashboardView(APIView):
     permission_classes = [IsAdminOrStaff]
 
     def get(self, request):
-        now = timezone.now()
-        today = now.date()
+        # Using localdate() to get the exact current date in IST (Indian Standard Time)
+        today = timezone.localdate()
         yesterday = today - timedelta(days=1)
         
-        # 1. Total Sales Income (0.0 maatti 0 aakki)
+        # 1. Total Sales Income 
         total_revenue_data = Order.objects.filter(
             order_status='DELIVERED'
         ).aggregate(total=Sum('total_amount'))
