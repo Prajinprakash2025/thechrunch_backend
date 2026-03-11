@@ -14,6 +14,7 @@ from notifications.utils import (
     send_telegram_cancellation_notification,
     send_fcm_notification
 )
+from notifications.models import AdminNotification
 
 # ==========================================
 # 1. CART MANAGEMENT APIs
@@ -132,13 +133,19 @@ class PlaceOrderView(views.APIView):
 
         # --- NOTIFICATIONS ---
         
-        # 1. Send Telegram Alert
+        # 1. Save to AdminNotification table
+        AdminNotification.objects.create(
+            notification_type='order',
+            message="New Order Received"
+        )
+        
+        # 2. Send Telegram Alert
         try:
             send_telegram_order_notification(order)
         except:
             pass
 
-        # 2. Send FCM Push Notification to Admin/Staff
+        # 3. Send FCM Push Notification to Admin/Staff
         try:
             admin_staff_users = User.objects.filter(is_staff=True)
             for admin in admin_staff_users:
@@ -206,13 +213,6 @@ class HistoryPagination(PageNumberPagination):
     max_page_size = 50
 
 # 2. Updated AdminOrderListView
-class AdminOrderListView(generics.ListAPIView):
-    """Lists orders. History shows latest first with pagination, others show oldest first without pagination."""
-    serializer_class = AdminOrderSerializer
-    permission_classes = [IsAdminOrStaff]
-    pagination_class = HistoryPagination 
-    
-    # 2. Updated AdminOrderListView
 class AdminOrderListView(generics.ListAPIView):
     """Lists orders. History shows latest first with pagination & search."""
     serializer_class = AdminOrderSerializer

@@ -13,6 +13,7 @@ from .models import ContactMessage
 from .serializers import ContactMessageSerializer
 
 from accounts.permissions import IsAdminOrStaff, IsSuperAdmin 
+from notifications.models import AdminNotification  # Added Notification Model Import
 
 # ============================================================
 # 📄 PAGINATION CLASS (12 items per page)
@@ -32,6 +33,14 @@ class ContactCreateView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
+        
+        # --- NOTIFICATION SAVING ---
+        # Saving the notification to database when a new contact message is received
+        AdminNotification.objects.create(
+            notification_type='inbox',
+            message="New message received in Inbox"
+        )
+
         return Response(
             {
                 "status": True,

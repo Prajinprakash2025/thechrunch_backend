@@ -5,6 +5,7 @@ from django.db.models import Sum
 from django.utils import timezone
 from datetime import timedelta
 from orders.models import Order
+from notifications.models import AdminNotification
 
 class RevenueDashboardView(APIView):
     permission_classes = [IsAdminOrStaff]

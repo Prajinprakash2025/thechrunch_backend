@@ -7,6 +7,7 @@ from .serializers import TableBookingSerializer
 from accounts.permissions import IsAdminOrStaff 
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
+from notifications.models import AdminNotification  # Added Notification Model Import
 
 class BookingPagination(PageNumberPagination):
     page_size = 12  
@@ -15,7 +16,7 @@ class BookingPagination(PageNumberPagination):
 
 # ============================================================
 # 1️⃣ CREATE BOOKING
-# public access 
+# Public access 
 # ============================================================
 class CreateBookingView(APIView):
     permission_classes = [AllowAny]
@@ -25,6 +26,14 @@ class CreateBookingView(APIView):
         
         if serializer.is_valid():
             serializer.save()
+            
+            # --- NOTIFICATION SAVING ---
+            # Save notification to database when a new booking is created
+            AdminNotification.objects.create(
+                notification_type='booking',
+                message="New Table Booking received"
+            )
+
             return Response({
                 "status": True,
                 "message": "Your table has been booked successfully!",
@@ -40,7 +49,7 @@ class CreateBookingView(APIView):
 
 # ============================================================
 # 2️⃣ LIST BOOKINGS
-# Can only see admin and staff (Protected)
+# Protected: Can only be seen by admin and staff
 # ============================================================
 class ListBookingsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrStaff]
@@ -57,21 +66,19 @@ class ListBookingsView(APIView):
                 Q(email__icontains=search_query)
             )
 
-        # 3. Pagination Apply 
+        # 3. Apply Pagination 
         paginator = BookingPagination()
         paginated_bookings = paginator.paginate_queryset(bookings, request, view=self)
         
         serializer = TableBookingSerializer(paginated_bookings, many=True)
         
-        # 5. Frontend-nu avashyamulla ella details-um response aayi kodukkuka
+        # 5. Provide all necessary details in the response for the frontend
         return Response({
             "status": True,
             "message": "Bookings retrieved successfully",
-            "total_items": paginator.page.paginator.count,   # Aake ethra bookings und
-            "total_pages": paginator.page.paginator.num_pages, # Aake ethra pages und
-            "current_page": paginator.page.number,           # Ippol ethamathe page aanu
-            "next_page_url": paginator.get_next_link(),      # Adutha 8 data edukkanulla URL
-            "data": serializer.data                          # Ee page-le 8 data
+            "total_items": paginator.page.paginator.count,     # Total number of bookings
+            "total_pages": paginator.page.paginator.num_pages, # Total number of pages
+            "current_page": paginator.page.number,             # Current page number
+            "next_page_url": paginator.get_next_link(),        # URL for the next page of data
+            "data": serializer.data                            # Data for the current page
         }, status=status.HTTP_200_OK)
-    
-
