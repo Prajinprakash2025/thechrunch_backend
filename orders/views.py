@@ -208,7 +208,7 @@ class CancelOrderView(views.APIView):
 
 # 1. Custom Pagination Class
 class HistoryPagination(PageNumberPagination):
-    page_size = 20  # Set the number of items per page here
+    page_size = 12  # Set the number of items per page here
     page_size_query_param = 'page_size'
     max_page_size = 50
 
@@ -262,7 +262,7 @@ class AdminOrderListView(generics.ListAPIView):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
-    
+
 
 class AdminOrderStatusUpdateView(views.APIView):
     permission_classes = [IsAdminOrStaff]   
