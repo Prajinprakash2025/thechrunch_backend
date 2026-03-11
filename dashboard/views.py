@@ -22,15 +22,18 @@ class AdminDashboardView(APIView):
         active_customers = User.objects.filter(role='user', is_blocked=False).count()
         total_revenue = Order.objects.filter(order_status='DELIVERED').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
-        # 2. WEEKLY ORDER VOLUME (Monday to Sunday)
+        # 2. WEEKLY ORDER VOLUME (Monday to Sunday) - Only DELIVERED Orders
         weekly_volume = []
-        # Calculate start of the week based on localdate
         start_of_week = today - timedelta(days=today.weekday())
         
         for i in range(7):
             current_day = start_of_week + timedelta(days=i)
-            # Filtering by exact date instead of datetime ranges for accuracy with localdate
-            day_orders = Order.objects.filter(created_at__date=current_day).count()
+            # Filtered by date and specifically 'DELIVERED' status
+            day_orders = Order.objects.filter(
+                created_at__date=current_day,
+                order_status='DELIVERED'
+            ).count()
+            
             weekly_volume.append({
                 "day": current_day.strftime("%a"),
                 "orders": day_orders
