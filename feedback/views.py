@@ -6,9 +6,15 @@ from .models import Review
 from .serializers import ReviewSerializer
 from orders.models import Order  
 from accounts.permissions import IsAdminOrStaff
+from rest_framework.pagination import PageNumberPagination
+from rest_framework import generics
+
+class AdminReviewPagination(PageNumberPagination):
+    page_size = 12
+    page_size_query_param = 'page_size' 
+    max_page_size = 50
 
 
-# 1. Eligibility Check API (Updated for One-Time Feedback)
 class ReviewEligibilityCheckView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -84,6 +90,7 @@ class AdminReviewListView(generics.ListAPIView):
     queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
     permission_classes = [IsAdminOrStaff]
+    pagination_class = AdminReviewPagination
 
 # Admin: Review Approve/Hide cheyyanulla API
 class AdminReviewUpdateView(generics.UpdateAPIView):
