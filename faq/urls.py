@@ -1,11 +1,17 @@
 from django.urls import path
-from .views import PublicFAQListView, AdminFAQListCreateView, AdminFAQDetailView
+from .views import (
+    PublicFAQListView, 
+    AdminFAQListCreateView, 
+    AdminFAQUpdateView, 
+    AdminFAQDeleteView
+)
 
 urlpatterns = [
-    # Public URL (For Website)
+    # 🌍 Public URL
     path('list/', PublicFAQListView.as_view(), name='public-faq-list'),
 
-    # Admin URLs (For Admin Dashboard)
+    # 🛡️ Admin URLs
     path('admin/list-create/', AdminFAQListCreateView.as_view(), name='admin-faq-list-create'),
-    path('admin/<int:pk>/', AdminFAQDetailView.as_view(), name='admin-faq-detail'),
+    path('admin/edit/<int:pk>/', AdminFAQUpdateView.as_view(), name='admin-faq-edit'),
+    path('admin/delete/<int:pk>/', AdminFAQDeleteView.as_view(), name='admin-faq-delete'),
 ]

@@ -1,22 +1,29 @@
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
-from accounts.permissions import IsAdminOrStaff  # <-- Ninte custom permission import cheythu
+from accounts.permissions import IsAdminOrStaff
 from .models import FAQ
 from .serializers import FAQSerializer
 
-# 🌍 PUBLIC API: Frontend-il kanikkan (Active aayathu mathram)
+# 🌍 PUBLIC API: Website-il kanikkan (Database-il ulla ellam public aayi kanikkum)
 class PublicFAQListView(generics.ListAPIView):
-    queryset = FAQ.objects.filter(is_active=True).order_by('created_at')
+    queryset = FAQ.objects.all().order_by('created_at') # filter(is_active=True) kalanju
     serializer_class = FAQSerializer
     permission_classes = [AllowAny]
 
-# 🛡️ ADMIN & STAFF APIs: Admin panel-il add/edit/delete cheyyan
+# 🛡️ ADMIN API: List cheyyanum puthiyathu add cheyyanum
 class AdminFAQListCreateView(generics.ListCreateAPIView):
     queryset = FAQ.objects.all().order_by('-created_at')
     serializer_class = FAQSerializer
-    permission_classes = [IsAdminOrStaff]  # <-- Ippo Admin/Staff randalkkum idukkam
+    permission_classes = [IsAdminOrStaff]
 
-class AdminFAQDetailView(generics.RetrieveUpdateDestroyAPIView):
+# ✏️ ADMIN API: Edit cheyyan mathram (Update Only)
+class AdminFAQUpdateView(generics.RetrieveUpdateAPIView):
     queryset = FAQ.objects.all()
     serializer_class = FAQSerializer
-    permission_classes = [IsAdminOrStaff]  # <-- Ippo Admin/Staff randalkkum edit/delete cheyyam
+    permission_classes = [IsAdminOrStaff]
+
+# 🗑️ ADMIN API: Delete cheyyan mathram
+class AdminFAQDeleteView(generics.DestroyAPIView):
+    queryset = FAQ.objects.all()
+    serializer_class = FAQSerializer
+    permission_classes = [IsAdminOrStaff]
