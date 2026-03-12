@@ -1,3 +1,5 @@
+from warnings import filters
+from rest_framework import generics, filters
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -90,7 +92,11 @@ class AdminReviewListView(generics.ListAPIView):
     queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
     permission_classes = [IsAdminOrStaff]
-    pagination_class = AdminReviewPagination
+    pagination_class = AdminReviewPagination 
+    
+    filter_backends = [filters.SearchFilter]
+    
+    search_fields = ['user__first_name', 'user__username']
 
 # Admin: Review Approve/Hide cheyyanulla API
 class AdminReviewUpdateView(generics.UpdateAPIView):

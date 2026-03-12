@@ -4,9 +4,10 @@ from accounts.permissions import IsAdminOrStaff
 from .models import FAQ
 from .serializers import FAQSerializer
 
-# 🌍 PUBLIC API: Website-il kanikkan (Database-il ulla ellam public aayi kanikkum)
+# 🌍 PUBLIC API: Website-il kanikkan (Backend-il thanne 5 aayi limit cheythirikkunnu)
 class PublicFAQListView(generics.ListAPIView):
-    queryset = FAQ.objects.all().order_by('created_at') # filter(is_active=True) kalanju
+    # Ippo queryset-nte avasanam [:5] koduthittundu. Athayathu 5 ennam mathram.
+    queryset = FAQ.objects.all().order_by('created_at')[:5] 
     serializer_class = FAQSerializer
     permission_classes = [AllowAny]
 
