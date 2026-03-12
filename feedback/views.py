@@ -10,7 +10,7 @@ from accounts.permissions import IsAdminOrStaff
 
 # 1. Frontend-nu review tab kanikkano ennu check cheyyanulla API
 class ReviewEligibilityCheckView(APIView):
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         # User-nte peril oru DELIVERED order engilum undengil True return cheyyum
