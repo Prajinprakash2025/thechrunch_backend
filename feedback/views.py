@@ -8,49 +8,68 @@ from orders.models import Order
 from accounts.permissions import IsAdminOrStaff
 
 
-# 1. Frontend-nu review tab kanikkano ennu check cheyyanulla API
+# 1. Eligibility Check API (Updated for One-Time Feedback)
 class ReviewEligibilityCheckView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        has_delivered_order = Order.objects.filter(
-            user=request.user, 
-            order_status='DELIVERED'
-        ).exists()
-        
-        if has_delivered_order:
+        user = request.user
+
+        # Condition 1: User already feedback ittitundengil
+        existing_review = Review.objects.filter(user=user).first()
+        if existing_review:
+            serializer = ReviewSerializer(existing_review)
             return Response({
-                "is_eligible": True
+                "is_eligible": False,
+                "has_reviewed": True,
+                "message": "You have already submitted your feedback.",
+                "review_data": serializer.data  # Frontend-nu kanikkan pazhaya review data
             })
-        
-        # Eligible allengil (Message venam)
+
+        # Condition 2: Check if user has at least one DELIVERED order
+        has_delivered_order = Order.objects.filter(user=user, order_status='DELIVERED').exists()
+
+        if has_delivered_order:
+            # Order delivered aayi, pakshe review ittitilla (Show Form)
+            return Response({
+                "is_eligible": True,
+                "has_reviewed": False
+            })
+
+        # Condition 3: Order onnum delivered aayitilla (Hide Form)
         return Response({
             "is_eligible": False,
-            "message": "Review available after your first delivery"
+            "has_reviewed": False,
+            "message": "Review option will unlock after your first order is delivered! 🍔"
         })
 
-# 2. Review Submit cheyyanulla API
+# 2. Review Submit API (Updated to block multiple submissions)
 class ReviewCreateView(generics.CreateAPIView):
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        # Backend Security: Delivered order illengil block cheyyum!
-        has_delivered_order = Order.objects.filter(
-            user=request.user, 
-            order_status='DELIVERED'
-        ).exists()
+        user = request.user
 
+        # SECURITY CHECK 1: User aadyame review ittitundengil block cheyyum!
+        if Review.objects.filter(user=user).exists():
+            return Response(
+                {"error": "You have already submitted your feedback. Multiple submissions are not allowed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # SECURITY CHECK 2: Delivered order illengil block cheyyum!
+        has_delivered_order = Order.objects.filter(user=user, order_status='DELIVERED').exists()
         if not has_delivered_order:
             return Response(
-                {"error": "You can only leave a review after receiving at least one delivered order."},
+                {"error": "You can only leave feedback after receiving at least one delivered order."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Validation pass aayal review save cheyyum
+        # Randum pass aayal mathram save cheyyum
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user) # Login cheytha aalude id automatic aayi edukkum
+        serializer.save(user=user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # 3. Homepage-il reviews kanikkanulla API (Public)
@@ -59,3 +78,15 @@ class ReviewListView(generics.ListAPIView):
     queryset = Review.objects.filter(is_approved=True).order_by('-created_at')
     serializer_class = ReviewSerializer
     permission_classes = [AllowAny]
+
+
+class AdminReviewListView(generics.ListAPIView):
+    queryset = Review.objects.all().order_by('-created_at')
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAdminOrStaff]
+
+# Admin: Review Approve/Hide cheyyanulla API
+class AdminReviewUpdateView(generics.UpdateAPIView):
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAdminOrStaff]
