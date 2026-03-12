@@ -152,7 +152,6 @@ class VerifyOTPView(APIView):
             }
         )
         
-        # Check if user is blocked before generating token
         if user.is_blocked:
             return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -163,9 +162,12 @@ class VerifyOTPView(APIView):
         otp_instance.delete()
 
         refresh = RefreshToken.for_user(user)
+        
+        # --- Ivideyanu change varuthiyath ---
         return Response({
             "status": True,
             "message": "Verification successful!",
+            "first_name": user.first_name, # <-- Puthiyathayi add cheythathu
             "role": user.role,
             "refresh": str(refresh),
             "access": str(refresh.access_token),
