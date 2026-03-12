@@ -13,13 +13,21 @@ class ReviewEligibilityCheckView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # User-nte peril oru DELIVERED order engilum undengil True return cheyyum
         has_delivered_order = Order.objects.filter(
             user=request.user, 
             order_status='DELIVERED'
         ).exists()
         
-        return Response({"is_eligible": has_delivered_order})
+        if has_delivered_order:
+            return Response({
+                "is_eligible": True
+            })
+        
+        # Eligible allengil (Message venam)
+        return Response({
+            "is_eligible": False,
+            "message": "Review available after your first delivery"
+        })
 
 # 2. Review Submit cheyyanulla API
 class ReviewCreateView(generics.CreateAPIView):
