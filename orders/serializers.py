@@ -10,17 +10,28 @@ class CartItemSerializer(serializers.ModelSerializer):
     item_id = serializers.IntegerField(source='item.id', read_only=True)
     name = serializers.CharField(source='item.name', read_only=True)
     image = serializers.ImageField(source='item.image', read_only=True) 
-    actual_price = serializers.DecimalField(source='item.actual_price', max_digits=10, decimal_places=2, read_only=True)
-    offer_price = serializers.DecimalField(source='item.offer_price', max_digits=10, decimal_places=2, read_only=True)
-    total_price = serializers.SerializerMethodField()
+    
+    # 🌟 NEW: Added Variant details (Size Name)
+    size_name = serializers.CharField(source='variant.size_name', read_only=True)
+    variant_id = serializers.IntegerField(source='variant.id', read_only=True, allow_null=True)
+    
+    # 🌟 UPDATED: These fields now dynamically pick price from Variant or Base Item
+    actual_price = serializers.SerializerMethodField()
+    offer_price = serializers.SerializerMethodField()
+    total_price = serializers.ReadOnlyField() # Uses the @property from models.py
 
     class Meta:
         model = CartItem
-        fields = ['id', 'item_id', 'name', 'image', 'actual_price', 'offer_price', 'quantity', 'total_price']
+        fields = [
+            'id', 'item_id', 'variant_id', 'name', 'size_name', 'image', 
+            'actual_price', 'offer_price', 'quantity', 'total_price'
+        ]
 
-    def get_total_price(self, obj):
-        price = obj.item.offer_price if obj.item.offer_price else obj.item.actual_price
-        return price * obj.quantity
+    def get_actual_price(self, obj):
+        return obj.variant.actual_price if obj.variant else obj.item.actual_price
+
+    def get_offer_price(self, obj):
+        return obj.variant.offer_price if obj.variant else obj.item.offer_price
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
@@ -31,11 +42,8 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'items', 'cart_total']
 
     def get_cart_total(self, obj):
-        total = 0
-        for cart_item in obj.items.all():
-            price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
-            total += (price * cart_item.quantity)
-        return total
+        # 🌟 UPDATED: Cleaner calculation using the model property
+        return sum(item.total_price for item in obj.items.all())
 
 
 # ==========================================
@@ -47,7 +55,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'item_id', 'item_name', 'image', 'price', 'quantity']
+        # 🌟 ADDED 'size_name' here so the customer receipt shows "Mandhi (Full)"
+        fields = ['id', 'item_id', 'item_name', 'size_name', 'image', 'price', 'quantity']
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -69,7 +78,7 @@ class OrderSerializer(serializers.ModelSerializer):
                 name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
                 return name if name else obj.cancelled_by.username
             
-            # The Fix: Safely get the role even if it is None in the database
+            # Safely get the role even if it is None in the database
             role = getattr(obj.cancelled_by, 'role', None)
             role_name = role.lower() if role else ''
             
@@ -108,12 +117,10 @@ class AdminOrderSerializer(serializers.ModelSerializer):
 
     def get_cancelled_by_display(self, obj):
         if obj.order_status == 'CANCELLED' and obj.cancelled_by:
-            # If the customer cancelled their own order
             if obj.cancelled_by == obj.user:
                 name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
                 return name if name else obj.cancelled_by.username
             
-            # The Fix: Safely get the role even if it is None in the database
             role = getattr(obj.cancelled_by, 'role', None)
             role_name = role.lower() if role else ''
             

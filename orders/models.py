@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from inventory.models import MenuItem 
+from inventory.models import MenuItem, MenuItemVariant  # 🌟 Added MenuItemVariant
 from accounts.models import Address   
 
 # ==========================================
@@ -17,22 +17,33 @@ class Cart(models.Model):
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, related_name='items', on_delete=models.CASCADE)
     item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
+    
+    # 🌟 NEW: Track which specific size the user added to cart
+    variant = models.ForeignKey(MenuItemVariant, on_delete=models.SET_NULL, null=True, blank=True)
+    
     quantity = models.PositiveIntegerField(default=1)
 
     def __str__(self):
-        return f"{self.quantity} x {self.item.name}"
+        size_info = f" ({self.variant.size_name})" if self.variant else ""
+        return f"{self.quantity} x {self.item.name}{size_info}"
         
     @property
     def total_price(self):
-        price = self.item.offer_price if self.item.offer_price else self.item.actual_price
+        # 🌟 NEW logic: Check if a variant price exists, else use base item price
+        if self.variant:
+            price = self.variant.offer_price if self.variant.offer_price else self.variant.actual_price
+        else:
+            price = self.item.offer_price if self.item.offer_price else self.item.actual_price
         return price * self.quantity
 
 # ==========================================
 # 2. ORDER MODELS
 # ==========================================
 class Order(models.Model):
+    # 🌟 ADDED 'RAZORPAY' to methods
     PAYMENT_METHODS = (
         ('COD', 'Cash on Delivery'),
+        ('RAZORPAY', 'Online Payment'),
     )
     
     PAYMENT_STATUS = (
@@ -52,7 +63,7 @@ class Order(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     delivery_address = models.ForeignKey(Address, on_delete=models.SET_NULL, null=True, blank=True)
     
-    # NEW FIELD: To track who cancelled the order
+
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_orders')
     
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -67,15 +78,19 @@ class Order(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Order #{self.id} - {self.user.first_name} - {self.order_status}"
+        return f"Order #{self.id} - {self.user.first_name}"
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     item = models.ForeignKey(MenuItem, on_delete=models.SET_NULL, null=True)
     
     item_name = models.CharField(max_length=255)
+    
+    # 🌟 NEW: Save the size name so it stays even if variant is deleted later
+    size_name = models.CharField(max_length=50, null=True, blank=True) 
+    
     price = models.DecimalField(max_digits=10, decimal_places=2) 
     quantity = models.PositiveIntegerField(default=1)
 
     def __str__(self):
-        return f"{self.quantity} x {self.item_name} (Order #{self.order.id})"
+        return f"{self.quantity} x {self.item_name} ({self.size_name}) - Order #{self.order.id}"
