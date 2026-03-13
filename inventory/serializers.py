@@ -1,21 +1,32 @@
 from rest_framework import serializers
-from .models import Category, MenuItem
+from .models import Category, MenuItem, MenuItemVariant # 🌟 Added MenuItemVariant
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = '__all__'
 
+# ============================================================
+# 🌟 NEW: VARIANT SERIALIZER
+# ============================================================
+class MenuItemVariantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MenuItemVariant
+        fields = ['id', 'size_name', 'actual_price', 'offer_price', 'quantity', 'is_available']
+
 class MenuItemSerializer(serializers.ModelSerializer):
     # This keeps the category name visible
     category_name = serializers.ReadOnlyField(source='category.name') 
+    
+    # 🌟 NEW: This grabs all related variants and attaches them to the main item
+    variants = MenuItemVariantSerializer(many=True, required=False)
 
     class Meta:
         model = MenuItem
         fields = '__all__'
 
     # ============================================================
-    # 🛑 CUSTOM VALIDATION FOR SECTION LIMITS
+    # 🛑 CUSTOM VALIDATION FOR SECTION LIMITS (Kept exactly as you wrote it!)
     # ============================================================
     def validate(self, data):
         section = data.get('section')
@@ -26,9 +37,6 @@ class MenuItemSerializer(serializers.ModelSerializer):
             'BANNER': 4,
             'COMBO MENU': 9,
             'TODAYS SPECIAL': 6,
-
-
-            # 'TODAY'S SPECIAL': 5,  # You can add more limits like this if needed
         }
 
         if section in SECTION_LIMITS:
@@ -48,3 +56,40 @@ class MenuItemSerializer(serializers.ModelSerializer):
                     })
         
         return data
+
+    # ============================================================
+    # 🌟 NEW: CUSTOM CREATE TO SAVE ITEM AND VARIANTS TOGETHER
+    # ============================================================
+    def create(self, validated_data):
+        # 1. Pull the variants list out of the request data
+        variants_data = validated_data.pop('variants', [])
+        
+        # 2. Create the main product (e.g., "Chicken Biryani")
+        menu_item = MenuItem.objects.create(**validated_data)
+        
+        # 3. Loop through and create the variants (e.g., "Full", "Half") linked to this item
+        for variant_data in variants_data:
+            MenuItemVariant.objects.create(menu_item=menu_item, **variant_data)
+            
+        return menu_item
+
+    # ============================================================
+    # 🌟 NEW: CUSTOM UPDATE TO HANDLE EDITING VARIANTS
+    # ============================================================
+    def update(self, instance, validated_data):
+        # 1. Pull the variants list out (use None as default to check if it was provided)
+        variants_data = validated_data.pop('variants', None)
+        
+        # 2. Update the main item details (Name, Image, Category, etc.)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # 3. If variants were sent from React, update them
+        if variants_data is not None:
+            # The cleanest way to update variants is to delete the old ones and save the new ones
+            instance.variants.all().delete()
+            for variant_data in variants_data:
+                MenuItemVariant.objects.create(menu_item=instance, **variant_data)
+
+        return instance

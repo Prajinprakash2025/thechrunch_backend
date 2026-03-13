@@ -4,10 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q  
 
-# --- UPDATED IMPORT ---
-# We are now importing IsAdminOrStaff from your custom permissions
 from accounts.permissions import IsAdminOrStaff 
-
 from .models import Category, MenuItem
 from .serializers import CategorySerializer, MenuItemSerializer
 
@@ -20,7 +17,7 @@ class AdminPagination(PageNumberPagination):
     max_page_size = 100
 
 # ==========================================
-# CATEGORY VIEWS
+# CATEGORY VIEWS (Unchanged)
 # ==========================================
 class CategoryListCreateView(generics.ListCreateAPIView):
     queryset = Category.objects.all()
@@ -29,7 +26,7 @@ class CategoryListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsAdminOrStaff()]  # <-- Updated to allow staff
+        return [IsAdminOrStaff()]  
 
 class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Category.objects.all()
@@ -38,7 +35,7 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsAdminOrStaff()]  # <-- Updated to allow staff
+        return [IsAdminOrStaff()]  
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
@@ -57,10 +54,6 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
         }, status=status.HTTP_200_OK)
 
 class PublicCategoryListView(generics.ListAPIView):
-    """
-    Public API to fetch all categories without pagination.
-    Perfect for frontend filters and dropdown menus.
-    """
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
@@ -75,21 +68,21 @@ class PublicMenuItemListView(generics.ListAPIView):
     pagination_class = None 
 
     def get_queryset(self):
-        # 1. Start with all available items
-        queryset = MenuItem.objects.filter(is_available=True).order_by('-created_at')
+        # 🌟 OPTIMIZATION: Added prefetch_related('variants') to speed up the API!
+        queryset = MenuItem.objects.prefetch_related('variants').filter(is_available=True).order_by('-created_at')
         
         # 2. Read the Query Parameters 
         search_query = self.request.query_params.get('search', '')
         category_id = self.request.query_params.get('category', '')
         section_name = self.request.query_params.get('section', '')
-        diet_pref = self.request.query_params.get('diet', '')  # 🟢 VEG/NON-VEG filter
+        diet_pref = self.request.query_params.get('diet', '')  
         
         # 3. Apply the filters safely
         if search_query:
             queryset = queryset.filter(
                 Q(name__icontains=search_query) | 
                 Q(description__icontains=search_query) |
-                Q(category__name__icontains=search_query) # <-- ADDED THIS LINE!
+                Q(category__name__icontains=search_query) 
             )
             
         if category_id and str(category_id).upper() != 'ALL':
@@ -98,7 +91,6 @@ class PublicMenuItemListView(generics.ListAPIView):
         if section_name and str(section_name).upper() != 'ALL':
             queryset = queryset.filter(section__iexact=section_name)
             
-        # 4. Apply Dietary Preference Filter (VEG / NON-VEG)
         if diet_pref and str(diet_pref).upper() != 'ALL':
             queryset = queryset.filter(dietary_preference__iexact=diet_pref)
 
@@ -107,23 +99,19 @@ class PublicMenuItemListView(generics.ListAPIView):
     
 class AdminMenuItemListCreateView(generics.ListCreateAPIView):
     serializer_class = MenuItemSerializer
-    permission_classes = [IsAdminOrStaff]  # <-- Updated to allow staff
+    permission_classes = [IsAdminOrStaff]  
     pagination_class = AdminPagination 
 
     def get_queryset(self):
-        # 1. Start with ALL items (including unavailable ones for the admin)
-        queryset = MenuItem.objects.all().order_by('-created_at')
+        # 🌟 OPTIMIZATION: Added prefetch_related('variants')
+        queryset = MenuItem.objects.prefetch_related('variants').all().order_by('-created_at')
         
-        # 2. Get the parameters from the frontend URL
         search_query = self.request.query_params.get('search', '')
         category_id = self.request.query_params.get('category', '')
         section_name = self.request.query_params.get('section', '')
         low_stock = self.request.query_params.get('low_stock', '')
-        
-        # 🌟 NEW: Look for the available parameter
         is_available_param = self.request.query_params.get('available', '')
         
-        # 3. Apply Text Search
         if search_query:
             queryset = queryset.filter(
                 Q(name__icontains=search_query) | 
@@ -131,19 +119,21 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
                 Q(category__name__icontains=search_query) 
             )
             
-        # 4. Apply Category Filter
         if category_id and str(category_id).upper() != 'ALL':
             queryset = queryset.filter(category_id=category_id)
             
-        # 5. Apply Section Filter
         if section_name and str(section_name).upper() != 'ALL':
             queryset = queryset.filter(section__iexact=section_name)
             
-        # 6. Apply Low Stock Filter (Less than 10)
+        # 🌟 NEW LOGIC: Apply Low Stock Filter for BOTH regular items and variants
         if low_stock and str(low_stock).lower() == 'true':
-            queryset = queryset.filter(quantity__lt=10)
+            queryset = queryset.filter(
+                # Condition A: It has NO variants, and the main quantity is < 10
+                Q(has_variants=False, quantity__lt=10) | 
+                # Condition B: It HAS variants, and any of the variant quantities are < 10
+                Q(has_variants=True, variants__quantity__lt=10)
+            ).distinct() # Use distinct() so items don't show up twice if multiple sizes are low stock!
             
-        # 🌟 NEW: Apply Availability Filter (True or False)
         if is_available_param:
             if str(is_available_param).lower() == 'true':
                 queryset = queryset.filter(is_available=True)
@@ -151,15 +141,16 @@ class AdminMenuItemListCreateView(generics.ListCreateAPIView):
                 queryset = queryset.filter(is_available=False)
             
         return queryset
-    
+
 class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = MenuItem.objects.all()
+    # 🌟 OPTIMIZATION: Added prefetch_related('variants')
+    queryset = MenuItem.objects.prefetch_related('variants').all()
     serializer_class = MenuItemSerializer
 
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
-        return [IsAdminOrStaff()]  # <-- Updated to allow staff
+        return [IsAdminOrStaff()]  
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)

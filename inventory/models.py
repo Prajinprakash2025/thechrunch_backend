@@ -8,8 +8,6 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
-# Note: The separate Section model has been REMOVED!
-
 # 2. MENU ITEM / PRODUCT MODEL
 class MenuItem(models.Model):
     # --- Dietary Choices ---
@@ -18,7 +16,7 @@ class MenuItem(models.Model):
         ('NON-VEG', 'Non-Veg'),
     ]
 
-    # --- Section Choices (From Screenshot) ---
+    # --- Section Choices ---
     SECTION_CHOICES = [
         ('ALL', 'All'),
         ('BANNER', 'Banner'),
@@ -30,8 +28,6 @@ class MenuItem(models.Model):
 
     # --- Relationships & Choices ---
     category = models.ForeignKey(Category, related_name='menu_items', on_delete=models.CASCADE)
-    
-    # ⬇️ Changed to a CharField with choices, default set to 'ALL'
     section = models.CharField(max_length=50, choices=SECTION_CHOICES, default='ALL')
     
     # --- Core Details ---
@@ -41,8 +37,12 @@ class MenuItem(models.Model):
     banner_image = models.ImageField(upload_to='banner_images/', blank=True, null=True, verbose_name="Banner Image")
     dietary_preference = models.CharField(max_length=10, choices=DIETARY_CHOICES, default='VEG')
     
+    # 🌟 NEW FIELD: Sizes undo illayo ennu ariyikkan
+    has_variants = models.BooleanField(default=False, verbose_name="Has Sizes/Variants?")
+    
     # --- Pricing & Inventory ---
-    actual_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Actual ₹")
+    # 🌟 CHANGED: Size ulla items-nu direct price aavashyamilla, athukondu blank/null aakki
+    actual_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Actual ₹", blank=True, null=True)
     offer_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, verbose_name="Offer ₹")
     quantity = models.PositiveIntegerField(default=0, verbose_name="Qty")
     
@@ -52,3 +52,18 @@ class MenuItem(models.Model):
 
     def __str__(self):
         return self.name
+
+
+# 3. 🌟 NEW MODEL: MENU ITEM VARIANT (Sizes, Prices & Stock)
+class MenuItemVariant(models.Model):
+    menu_item = models.ForeignKey(MenuItem, related_name='variants', on_delete=models.CASCADE)
+    size_name = models.CharField(max_length=50) # e.g., 'Small', 'Half', 'Full'
+    
+    actual_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Actual ₹")
+    offer_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, verbose_name="Offer ₹")
+    quantity = models.PositiveIntegerField(default=0, verbose_name="Qty / Stock")
+    
+    is_available = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.menu_item.name} - {self.size_name}"
