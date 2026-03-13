@@ -11,14 +11,14 @@ class CartItemSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='item.name', read_only=True)
     image = serializers.ImageField(source='item.image', read_only=True) 
     
-    # 🌟 NEW: Added Variant details (Size Name)
+    # Track Size/Variant details
     size_name = serializers.CharField(source='variant.size_name', read_only=True)
     variant_id = serializers.IntegerField(source='variant.id', read_only=True, allow_null=True)
     
-    # 🌟 UPDATED: These fields now dynamically pick price from Variant or Base Item
+    # Dynamic price display
     actual_price = serializers.SerializerMethodField()
     offer_price = serializers.SerializerMethodField()
-    total_price = serializers.ReadOnlyField() # Uses the @property from models.py
+    total_price = serializers.ReadOnlyField() # Calls the safe @property in models.py
 
     class Meta:
         model = CartItem
@@ -28,10 +28,15 @@ class CartItemSerializer(serializers.ModelSerializer):
         ]
 
     def get_actual_price(self, obj):
-        return obj.variant.actual_price if obj.variant else obj.item.actual_price
+        # 🌟 Check variant first, then base item. Use 0 if both are None.
+        if obj.variant:
+            return obj.variant.actual_price or 0
+        return obj.item.actual_price or 0
 
     def get_offer_price(self, obj):
-        return obj.variant.offer_price if obj.variant else obj.item.offer_price
+        if obj.variant:
+            return obj.variant.offer_price or 0
+        return obj.item.offer_price or 0
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
@@ -42,7 +47,7 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'items', 'cart_total']
 
     def get_cart_total(self, obj):
-        # 🌟 UPDATED: Cleaner calculation using the model property
+        # 🌟 Calculate total using the safe property from the model
         return sum(item.total_price for item in obj.items.all())
 
 
@@ -55,7 +60,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItem
-        # 🌟 ADDED 'size_name' here so the customer receipt shows "Mandhi (Full)"
         fields = ['id', 'item_id', 'item_name', 'size_name', 'image', 'price', 'quantity']
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -73,21 +77,16 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_cancelled_by_display(self, obj):
         if obj.order_status == 'CANCELLED' and obj.cancelled_by:
-            # If the customer cancelled their own order
             if obj.cancelled_by == obj.user:
                 name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
                 return name if name else obj.cancelled_by.username
             
-            # Safely get the role even if it is None in the database
             role = getattr(obj.cancelled_by, 'role', None)
             role_name = role.lower() if role else ''
             
-            if role_name == 'admin' or obj.cancelled_by.is_superuser:
-                return "Admin"
-            elif role_name == 'staff':
-                return "Staff"
-            else:
-                return "Admin"
+            if role_name in ['admin', 'staff'] or obj.cancelled_by.is_superuser:
+                return role_name.capitalize()
+            return "Admin"
         return None
 
 
@@ -112,22 +111,13 @@ class AdminOrderSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj):
         if obj.user:
-            return f"{obj.user.first_name} {obj.user.last_name}".strip()
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
         return "Unknown Customer"
 
     def get_cancelled_by_display(self, obj):
+        # Uses the same logic as the OrderSerializer
         if obj.order_status == 'CANCELLED' and obj.cancelled_by:
             if obj.cancelled_by == obj.user:
-                name = f"{obj.cancelled_by.first_name} {obj.cancelled_by.last_name}".strip()
-                return name if name else obj.cancelled_by.username
-            
-            role = getattr(obj.cancelled_by, 'role', None)
-            role_name = role.lower() if role else ''
-            
-            if role_name == 'admin' or obj.cancelled_by.is_superuser:
-                return "Admin"
-            elif role_name == 'staff':
-                return "Staff"
-            else:
-                return "Admin"
+                return "Customer"
+            return "Admin/Staff"
         return None

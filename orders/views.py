@@ -6,7 +6,7 @@ from django.db import transaction
 from accounts.permissions import IsAdminOrStaff
 from accounts.models import User, Address
 from .models import Cart, CartItem, Order, OrderItem
-from inventory.models import MenuItem, MenuItemVariant # 🌟 IMPORTED VARIANTS
+from inventory.models import MenuItem, MenuItemVariant 
 from .serializers import CartSerializer, OrderSerializer, AdminOrderSerializer
 from rest_framework.pagination import PageNumberPagination
 from notifications.utils import (
@@ -35,7 +35,7 @@ class CartUpdateView(views.APIView):
     def post(self, request):
         cart, _ = Cart.objects.get_or_create(user=request.user)
         item_id = request.data.get('item_id')
-        variant_id = request.data.get('variant_id') # 🌟 NEW: Get variant_id
+        variant_id = request.data.get('variant_id') 
         action = request.data.get('action') 
         quantity = int(request.data.get('quantity', 1))
 
@@ -44,7 +44,6 @@ class CartUpdateView(views.APIView):
 
         menu_item = get_object_or_404(MenuItem, id=item_id)
         
-        # 🌟 NEW: Check for variant
         variant = None
         if variant_id:
             variant = get_object_or_404(MenuItemVariant, id=variant_id, menu_item=menu_item)
@@ -85,7 +84,7 @@ class CartMergeView(views.APIView):
         cart.items.all().delete()
         for data in items_data:
             item_id = data.get('item_id')
-            variant_id = data.get('variant_id') # 🌟 NEW
+            variant_id = data.get('variant_id') 
             quantity = data.get('quantity', 1)
             
             menu_item = get_object_or_404(MenuItem, id=item_id)
@@ -98,7 +97,7 @@ class CartMergeView(views.APIView):
 
 
 # ==========================================
-# 2. ORDER PLACEMENT (With Telegram & FCM)
+# 2. ORDER PLACEMENT
 # ==========================================
 
 class PlaceOrderView(views.APIView):
@@ -116,7 +115,7 @@ class PlaceOrderView(views.APIView):
         payment_method = request.data.get('payment_method', 'COD')
         delivery_address = get_object_or_404(Address, id=address_id, user=user)
 
-        # 🌟 UPDATED: Use the new total_price property to calculate subtotal cleanly
+        # 🌟 SAFETY: Using our fixed model property
         subtotal = sum(item.total_price for item in cart.items.all())
 
         order = Order.objects.create(
@@ -126,44 +125,40 @@ class PlaceOrderView(views.APIView):
         )
 
         for cart_item in cart.items.all():
-            # 🌟 UPDATED: Get price depending on variant or base item
+            # 🌟 SAFETY: Improved price logic to prevent NoneType error
             if cart_item.variant:
-                price = cart_item.variant.offer_price if cart_item.variant.offer_price else cart_item.variant.actual_price
+                price = cart_item.variant.offer_price if cart_item.variant.offer_price is not None else cart_item.variant.actual_price
             else:
-                price = cart_item.item.offer_price if cart_item.item.offer_price else cart_item.item.actual_price
+                price = cart_item.item.offer_price if cart_item.item.offer_price is not None else cart_item.item.actual_price
+            
+            # Final fallback if admin forgot price
+            price = price if price is not None else 0
                 
             OrderItem.objects.create(
                 order=order, 
                 item=cart_item.item, 
                 item_name=cart_item.item.name,
-                size_name=cart_item.variant.size_name if cart_item.variant else None, # 🌟 Save Size Name
+                size_name=cart_item.variant.size_name if cart_item.variant else None,
                 price=price, 
                 quantity=cart_item.quantity
             )
             
-            # 🌟 UPDATED: Smart Inventory Management (Variant vs Base Item)
+            # Inventory Management
             if cart_item.variant:
-                if cart_item.variant.quantity >= cart_item.quantity:
-                    cart_item.variant.quantity -= cart_item.quantity
-                else:
-                    cart_item.variant.quantity = 0 
+                cart_item.variant.quantity = max(0, cart_item.variant.quantity - cart_item.quantity)
                 cart_item.variant.save()
             else:
-                if cart_item.item.quantity >= cart_item.quantity:
-                    cart_item.item.quantity -= cart_item.quantity
-                else:
-                    cart_item.item.quantity = 0 
+                cart_item.item.quantity = max(0, cart_item.item.quantity - cart_item.quantity)
                 cart_item.item.save() 
 
         cart.items.all().delete()
 
-        # --- NOTIFICATIONS ---
+        # Notifications
         AdminNotification.objects.create(notification_type='order', message="New Order Received")
         
         try:
             send_telegram_order_notification(order)
-        except:
-            pass
+        except: pass
 
         try:
             admin_staff_users = User.objects.filter(is_staff=True)
@@ -174,8 +169,7 @@ class PlaceOrderView(views.APIView):
                     body=f"Order #{order.id} from {order.user.first_name}. Total: ₹{order.total_amount}",
                     data={"order_id": str(order.id), "type": "NEW_ORDER"}
                 )
-        except Exception as e:
-            print(f"FCM Notification Error: {e}")
+        except: pass
 
         return Response({"message": "Order placed successfully!", "order_id": order.id}, status=status.HTTP_201_CREATED)
 
@@ -206,7 +200,7 @@ class CancelOrderView(views.APIView):
         order.cancelled_by = request.user
         order.save()
 
-        # 🌟 UPDATED: Return items to correct stock (Variant or Base Item)
+        # Return items to stock correctly
         for order_item in order.items.all():
             if order_item.item: 
                 if order_item.size_name:
@@ -220,8 +214,7 @@ class CancelOrderView(views.APIView):
 
         try:
             send_telegram_cancellation_notification(order)
-        except:
-            pass
+        except: pass
 
         return Response({"message": "Order cancelled successfully"}, status=status.HTTP_200_OK)
 
@@ -254,13 +247,11 @@ class AdminOrderListView(generics.ListAPIView):
                     queryset = queryset.filter(id=int(search_order_id))
                 except ValueError:
                     queryset = queryset.none()
-                    
             return queryset
         
         queryset = Order.objects.all().order_by('created_at')
         if status_param:
             queryset = queryset.filter(order_status=status_param)
-            
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -287,8 +278,6 @@ class AdminOrderStatusUpdateView(views.APIView):
         
         if new_status == 'CANCELLED' and order.order_status != 'CANCELLED':
             order.cancelled_by = request.user
-            
-            # 🌟 UPDATED: Return items to correct stock (Variant or Base Item)
             for order_item in order.items.all():
                 if order_item.item: 
                     if order_item.size_name:

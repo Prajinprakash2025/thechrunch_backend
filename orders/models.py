@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from inventory.models import MenuItem, MenuItemVariant  # 🌟 Added MenuItemVariant
+from inventory.models import MenuItem, MenuItemVariant 
 from accounts.models import Address   
 
 # ==========================================
@@ -17,10 +17,7 @@ class Cart(models.Model):
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, related_name='items', on_delete=models.CASCADE)
     item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
-    
-    # 🌟 NEW: Track which specific size the user added to cart
     variant = models.ForeignKey(MenuItemVariant, on_delete=models.SET_NULL, null=True, blank=True)
-    
     quantity = models.PositiveIntegerField(default=1)
 
     def __str__(self):
@@ -29,21 +26,25 @@ class CartItem(models.Model):
         
     @property
     def total_price(self):
-        # 🌟 NEW logic: Check if a variant price exists, else use base item price
+        # 🌟 SAFE LOGIC: This prevents the 'NoneType' Error
         if self.variant:
-            price = self.variant.offer_price if self.variant.offer_price else self.variant.actual_price
+            price = self.variant.offer_price if self.variant.offer_price is not None else self.variant.actual_price
         else:
-            price = self.item.offer_price if self.item.offer_price else self.item.actual_price
+            price = self.item.offer_price if self.item.offer_price is not None else self.item.actual_price
+        
+        # If both prices are missing in admin, default to 0 to prevent crash
+        if price is None:
+            price = 0
+            
         return price * self.quantity
 
 # ==========================================
 # 2. ORDER MODELS
 # ==========================================
 class Order(models.Model):
-    # 🌟 ADDED 'RAZORPAY' to methods
+    # Removed Razorpay as requested
     PAYMENT_METHODS = (
         ('COD', 'Cash on Delivery'),
-        ('RAZORPAY', 'Online Payment'),
     )
     
     PAYMENT_STATUS = (
@@ -62,8 +63,6 @@ class Order(models.Model):
     
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     delivery_address = models.ForeignKey(Address, on_delete=models.SET_NULL, null=True, blank=True)
-    
-
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_orders')
     
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -83,12 +82,8 @@ class Order(models.Model):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     item = models.ForeignKey(MenuItem, on_delete=models.SET_NULL, null=True)
-    
     item_name = models.CharField(max_length=255)
-    
-    # 🌟 NEW: Save the size name so it stays even if variant is deleted later
     size_name = models.CharField(max_length=50, null=True, blank=True) 
-    
     price = models.DecimalField(max_digits=10, decimal_places=2) 
     quantity = models.PositiveIntegerField(default=1)
 
