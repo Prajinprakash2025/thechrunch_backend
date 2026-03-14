@@ -22,7 +22,7 @@ class MenuItem(models.Model):
         ('BANNER', 'Banner'),
         ('COMBO MENU', 'Combo Menu'),
         ('BEST SELLER', 'Best Seller'),
-        ("TODAYS SPECIAL", "Today's Special"),
+        ("TODAY'S SPECIAL", "Today's Special"),
         ('OTHERS', 'Others'),
     ]
 
