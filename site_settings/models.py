@@ -10,10 +10,10 @@ class SiteSetting(models.Model):
     address_type = models.TextField(blank=True, null=True, default="")
     
     # --- GPS tracking for Restaurant ---
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, default=0.0)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, default=0.0)
     
-    delivery_radius = models.FloatField(default=0, help_text="In KM")
+    delivery_radius = models.FloatField(default=0.0, help_text="In KM")
 
     # --- Footer Content & Display Hours ---
     footer_description = models.TextField(blank=True, null=True, default="")
@@ -28,10 +28,10 @@ class SiteSetting(models.Model):
     is_manually_open = models.BooleanField(default=True, help_text="Turn OFF to manually close the restaurant immediately.")
 
     # --- Social Media Links ---
-    instagram_url = models.URLField(max_length=500, blank=True, null=True)
-    facebook_url = models.URLField(max_length=500, blank=True, null=True)
-    twitter_url = models.URLField(max_length=500, blank=True, null=True)
-    whatsapp_url = models.URLField(max_length=500, blank=True, null=True)
+    instagram_url = models.URLField(max_length=500, blank=True, null=True, default="")
+    facebook_url = models.URLField(max_length=500, blank=True, null=True, default="")
+    twitter_url = models.URLField(max_length=500, blank=True, null=True, default="")
+    whatsapp_url = models.URLField(max_length=500, blank=True, null=True, default="")
 
     @property
     def is_open(self):
@@ -63,6 +63,7 @@ class SiteSetting(models.Model):
         super(SiteSetting, self).save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
+        # Prevent deletion of settings
         pass
 
     class Meta:

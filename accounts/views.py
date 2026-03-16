@@ -9,7 +9,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import generics
-
+from .utils import send_whatsapp_otp  # 🌟 ഇംപോർട്ട് ചേർക്കുക
 from .models import PhoneOTP, Address
 from .serializers import LoginSerializer, VerifyOTPSerializer, UserProfileSerializer, AddressSerializer
 from .permissions import IsAdminUser
@@ -86,10 +86,13 @@ class SignupRequestOTPView(APIView):
         otp_instance.email = email 
         otp_instance.generate_otp() 
         
+        # 🌟 WhatsApp വഴി OTP അയക്കുന്നു
+        send_whatsapp_otp(phone, otp_instance.otp)
+        
         return Response({
             "status": True, 
-            "message": "OTP sent! Data saved to temp store.",
-            "data": {"test_otp": otp_instance.otp}
+            "message": "OTP sent via WhatsApp!",
+            "data": {"test_otp": otp_instance.otp} # ടെസ്റ്റിംഗ് കഴിഞ്ഞ് ഇത് മാറ്റാം
         }, status=status.HTTP_200_OK)
 
 
@@ -111,15 +114,18 @@ class ResendOTPView(APIView):
                 return Response({"status": False, "message": "Session expired. Please start signup again."}, status=status.HTTP_400_BAD_REQUEST)
 
             otp_instance.generate_otp()
+
+            # 🌟 WhatsApp വഴി പുതിയ OTP അയക്കുന്നു
+            send_whatsapp_otp(phone, otp_instance.otp)
+
             return Response({
                 "status": True, 
-                "message": "New OTP sent!",
+                "message": "New OTP sent via WhatsApp!",
                 "data": {"test_otp": otp_instance.otp}
             }, status=status.HTTP_200_OK)
 
         except PhoneOTP.DoesNotExist:
             return Response({"status": False, "message": "No session found. Please request OTP first."}, status=status.HTTP_400_BAD_REQUEST)
-
 
 # ============================================================
 # 4. OTP FLOW: SIGNUP & LOGIN - STEP 3 (Verify OTP)
@@ -186,7 +192,6 @@ class LoginRequestOTPView(APIView):
 
         try:
             user = User.objects.get(phone_number=phone)
-            # Prevent sending OTP if account is already blocked
             if user.is_blocked:
                 return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
         except User.DoesNotExist:
@@ -195,9 +200,12 @@ class LoginRequestOTPView(APIView):
         otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
 
+        # 🌟 WhatsApp വഴി OTP അയക്കുന്നു
+        send_whatsapp_otp(phone, otp_instance.otp)
+
         return Response({
             "status": True, 
-            "message": "Login OTP sent!",
+            "message": "Login OTP sent via WhatsApp!",
             "data": {"test_otp": otp_instance.otp}
         }, status=status.HTTP_200_OK)
 
