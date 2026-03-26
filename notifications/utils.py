@@ -12,12 +12,10 @@ User = get_user_model()
 # ==========================================
 def send_fcm_notification(exclude_user_id, title, body, data=None):
     """
-    Sends Push Notifications to all Admin/Staff members, 
-    excluding the user who triggered the action (order creator).
-    Includes WebpushConfig for PWA background notifications.
+    Sends Data-Only Push Notifications to all Admin/Staff members.
+    (Frontend Service Worker will handle the actual notification display to prevent duplicates)
     """
     try:
-        # Get all active FCM tokens for Admin and Staff
         admin_staff_devices = FCMDevice.objects.filter(
             user__is_staff=True
         ).exclude(user=exclude_user_id)
@@ -28,31 +26,21 @@ def send_fcm_notification(exclude_user_id, title, body, data=None):
 
         tokens = [device.fcm_token for device in admin_staff_devices]
 
-        # 🌟 NEW: Webpush Configuration for browsers/PWAs
-        webpush_config = messaging.WebpushConfig(
-            notification=messaging.WebpushNotification(
-                title=title,
-                body=body,
-                icon='/icon-192.png', # Path to your PWA icon
-                badge='/icon-192.png',
-                tag='new-order',      # Groups similar notifications
-                renotify=True,        # Alerts again even if a previous notification exists
-                require_interaction=True # Keeps notification on screen until user clicks/dismisses
-            ),
-            fcm_options=messaging.WebpushFCMOptions(
-                link=data.get('url') if data else '/admin/orders'
-            )
-        )
+        # Prepare the data payload (All values in 'data' must be strings)
+        payload_data = {
+            "title": str(title),
+            "body": str(body),
+        }
+        
+        # Merge any additional data passed to the function
+        if data:
+            for key, value in data.items():
+                payload_data[key] = str(value)
 
-        # Use Multicast to send to multiple tokens at once
+        # 🌟 Data-Only Message (Removed 'notification' and 'webpush' blocks)
         message = messaging.MulticastMessage(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data=data or {},
+            data=payload_data,
             tokens=tokens,
-            webpush=webpush_config, # 🌟 NEW: Injected webpush settings here
         )
 
         response = messaging.send_multicast(message)
