@@ -24,8 +24,8 @@ def set_jwt_cookies(response, user):
     
     cookie_params = {
         'httponly': True,
-        'secure': False,  # ⚠️ Production-il (HTTPS) True aakkanam
-        'samesite': 'Lax',
+        'secure': True,  # ⚠️ Production-il (HTTPS) True aakkanam
+        'samesite': 'None',
         'max_age': 3600 * 24 * 7 # 7 Days
     }
     

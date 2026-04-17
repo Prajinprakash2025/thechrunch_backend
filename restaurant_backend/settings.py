@@ -215,3 +215,9 @@ REST_FRAMEWORK = {
         'otp_requests': '3/m',
     }
 }
+
+# Cookie Security Settings (Cross-Domain Cookies work aakan)
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
