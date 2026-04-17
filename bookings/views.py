@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import TableBooking
 from .serializers import TableBookingSerializer
-from accounts.permissions import IsAdminOrStaff 
+from accounts.permissions import IsAdminOrStaff ,IsNotBlocked
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 from notifications.models import AdminNotification  # Added Notification Model Import
@@ -52,7 +52,7 @@ class CreateBookingView(APIView):
 # Protected: Can only be seen by admin and staff
 # ============================================================
 class ListBookingsView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminOrStaff]
+    permission_classes = [IsNotBlocked, IsAdminOrStaff]
 
     def get(self, request):
         bookings = TableBooking.objects.all().order_by('-created_at')

@@ -13,29 +13,30 @@ from .serializers import (
 from .utils import send_sms_otp
 from .permissions import IsAdminOrStaff
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
 User = get_user_model()
 
-# ============================================================================
-# HELPER FUNCTION: To set Token in HTTP-Only Cookie
-# ============================================================================
-def set_jwt_cookies(response, user):
-    """Generates Access & Refresh tokens and sets them as HTTP-Only Cookies"""
-    refresh = RefreshToken.for_user(user)
-    
-    cookie_params = {
+def get_cookie_params():
+    """Centralized cookie parameters to avoid mismatch during set/delete"""
+    return {
         'httponly': True,
-        'secure': True,  # ⚠️ Production-il (HTTPS) True aakkanam
-        'samesite': 'None',
-        'max_age': 3600 * 24 * 7 # 7 Days
+        'secure': True,      # ⚠️ Production-il HTTPS nirbandham!
+        'samesite': 'None',  # Cross-domain support (Frontend on Vercel/Localhost, Backend on PythonAnywhere)
+        'path': '/'
     }
+
+def set_jwt_cookies(response, user):
+    """Generates and sets JWT tokens in cookies"""
+    refresh = RefreshToken.for_user(user)
+    cookie_params = get_cookie_params()
     
-    response.set_cookie(key='access_token', value=str(refresh.access_token), **cookie_params)
-    response.set_cookie(key='refresh_token', value=str(refresh), **cookie_params)
+    response.set_cookie(key='access_token', value=str(refresh.access_token), max_age=3600, **cookie_params)
+    response.set_cookie(key='refresh_token', value=str(refresh), max_age=3600 * 24 * 7, **cookie_params)
     return response
 
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+
 
 class CookieTokenRefreshView(APIView):
     permission_classes = [AllowAny]
@@ -53,37 +54,24 @@ class CookieTokenRefreshView(APIView):
 
             response = Response({"status": True, "message": "Token refreshed successfully"}, status=status.HTTP_200_OK)
 
-            # --- Cookie Parameters (Production Standard) ---
-            cookie_params = {
-                'httponly': True,
-                'secure': True,      # Production-il HTTPS nirbandham
-                'samesite': 'None',  # Cross-site work cheyyan
-                'path': '/',         # Ella path-ilum cookie kittaam
-            }
-
-            # 1. New Access Token set cheyyunnu
+            cookie_params = get_cookie_params()
+            
+            # Puthiya access token set cheyyunnu
             response.set_cookie(
                 key='access_token',
                 value=str(refresh.access_token),
-                max_age=3600, # 1 Hour
+                max_age=3600,
                 **cookie_params
             )
-
-            # 💡 OPTIONAL: Ninte settings-il Rotation ON aanengil puthiya refresh token koodi set cheyyunnam
-            # response.set_cookie(
-            #     key='refresh_token',
-            #     value=str(refresh),
-            #     max_age=86400 * 7, # 7 Days
-            #     **cookie_params
-            # )
-
             return response
 
         except (TokenError, InvalidToken, User.DoesNotExist):
+            # Token thettanel Cookies pakka aayi clear cheyyanam!
             response = Response({"status": False, "error": "Invalid or expired token"}, status=status.HTTP_401_UNAUTHORIZED)
-            # Cookie clear cheyyumpozhum same params (samesite, secure) venam!
-            response.delete_cookie('access_token', samesite='None', secure=True)
-            response.delete_cookie('refresh_token', samesite='None', secure=True)
+            cookie_params = get_cookie_params()
+            # 🛠️ Fix: Error vannalum parameters vechu delete cheyyuka
+            response.delete_cookie('access_token', **cookie_params)
+            response.delete_cookie('refresh_token', **cookie_params)
             return response
 
 # ============================================================================
@@ -205,9 +193,23 @@ class LogoutView(APIView):
             "message": "Logged out successfully"
         }, status=status.HTTP_200_OK)
 
-        # ✅ Minimal & safe
-        response.delete_cookie('access_token', path='/')
-        response.delete_cookie('refresh_token', path='/')
+        # 🛠️ Fix: Delete cheyyumpozhum same parameters venam!
+        # max_age=0 set cheyyunnathu browser-ne cookie udane delete cheyyan force cheyyum
+        cookie_params = get_cookie_params()
+        
+        # 'httponly' delete_cookie-il valid argument alla, so athu ozhivakkanam
+        delete_params = {
+            'secure': cookie_params['secure'],
+            'samesite': cookie_params['samesite'],
+            'path': cookie_params['path']
+        }
+
+        response.delete_cookie('access_token', **delete_params)
+        response.delete_cookie('refresh_token', **delete_params)
+        
+        # Extra safety for stubborn browsers
+        response.set_cookie('access_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **delete_params)
+        response.set_cookie('refresh_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **delete_params)
 
         return response
 
