@@ -34,28 +34,56 @@ def set_jwt_cookies(response, user):
     response.set_cookie(key='refresh_token', value=str(refresh), **cookie_params)
     return response
 
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+
 class CustomTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # 🌟 IVIDE NOKKU: Cookie-il ninnum token edukunnundo?
+        # 1. Cookie-il ninnu token edukkan shramikkunnu
         refresh_token = request.COOKIES.get('refresh_token')
 
+        # 2. Token illengil 401 return cheyyunnu (500 error ozhivakkan)
         if not refresh_token:
-            return Response({"status": False, "message": "Refresh token missing"}, status=401)
+            return Response({
+                "status": False, 
+                "message": "Refresh token missing from cookies"
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
-            refresh = RefreshToken(refresh_token) # Cookie token upayogikkunnu
+            # 3. SimpleJWT upayogichu token validate cheyyunnu
+            refresh = RefreshToken(refresh_token)
+            
+            # User-e kandupidikkunnu
             user_id = refresh.payload.get('user_id')
             user = User.objects.get(id=user_id)
 
-            response = Response({"status": True, "message": "Token refreshed"}, status=200)
-            
-            # Helper function vechu puthiya access token set cheyyunnu
+            # Success Response
+            response = Response({
+                "status": True, 
+                "message": "Token refreshed successfully"
+            }, status=status.HTTP_200_OK)
+
+            # 4. Puthiya tokens cookies aayi thirichu set cheyyunnu (Helper function)
             return set_jwt_cookies(response, user, refresh)
-            
-        except (TokenError, User.DoesNotExist):
-            return Response({"status": False, "message": "Invalid token"}, status=401)
+
+        except (TokenError, InvalidToken):
+            return Response({
+                "status": False, 
+                "message": "Token is invalid or expired"
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        except User.DoesNotExist:
+            return Response({
+                "status": False, 
+                "message": "User not found"
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            # Athyavishyamulla ella errors-um ivide catch cheyyum
+            return Response({
+                "status": False, 
+                "message": "An unexpected error occurred"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ============================================================================
 # 1. ADMIN & STAFF (Password Login)
