@@ -1,10 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import get_user_model
-from django.conf import settings
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+
 from .models import PhoneOTP, Address
 from .serializers import (
     LoginSerializer, SendOTPSerializer, VerifyOTPSerializer, 
@@ -12,18 +13,18 @@ from .serializers import (
 )
 from .utils import send_sms_otp
 from .permissions import IsAdminOrStaff
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
 User = get_user_model()
 
+# ============================================================================
+# 🛡️ GLOBAL COOKIE SETTINGS (Production Standard)
+# ============================================================================
 def get_cookie_params():
     """Centralized cookie parameters to avoid mismatch during set/delete"""
     return {
         'httponly': True,
-        'secure': True,      # ⚠️ Production-il HTTPS nirbandham!
-        'samesite': 'None',  # Cross-domain support (Frontend on Vercel/Localhost, Backend on PythonAnywhere)
+        'secure': True,      # Production-il HTTPS nirbandham!
+        'samesite': 'None',  # Cross-domain support
         'path': '/'
     }
 
@@ -35,44 +36,6 @@ def set_jwt_cookies(response, user):
     response.set_cookie(key='access_token', value=str(refresh.access_token), max_age=3600, **cookie_params)
     response.set_cookie(key='refresh_token', value=str(refresh), max_age=3600 * 24 * 7, **cookie_params)
     return response
-
-
-
-class CookieTokenRefreshView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        refresh_token = request.COOKIES.get('refresh_token')
-
-        if not refresh_token:
-            return Response({"status": False, "error": "No refresh token found"}, status=status.HTTP_401_UNAUTHORIZED)
-
-        try:
-            refresh = RefreshToken(refresh_token)
-            user_id = refresh.payload.get('user_id')
-            user = User.objects.get(id=user_id)
-
-            response = Response({"status": True, "message": "Token refreshed successfully"}, status=status.HTTP_200_OK)
-
-            cookie_params = get_cookie_params()
-            
-            # Puthiya access token set cheyyunnu
-            response.set_cookie(
-                key='access_token',
-                value=str(refresh.access_token),
-                max_age=3600,
-                **cookie_params
-            )
-            return response
-
-        except (TokenError, InvalidToken, User.DoesNotExist):
-            # Token thettanel Cookies pakka aayi clear cheyyanam!
-            response = Response({"status": False, "error": "Invalid or expired token"}, status=status.HTTP_401_UNAUTHORIZED)
-            cookie_params = get_cookie_params()
-            # 🛠️ Fix: Error vannalum parameters vechu delete cheyyuka
-            response.delete_cookie('access_token', **cookie_params)
-            response.delete_cookie('refresh_token', **cookie_params)
-            return response
 
 # ============================================================================
 # 1. ADMIN & STAFF (Password Login)
@@ -95,14 +58,13 @@ class LoginView(APIView):
 
 class CreateStaffView(APIView):
     permission_classes = [IsAdminOrStaff]
+    
     def post(self, request):
-        # Staff creation logic ivide add cheyyam
-        return Response({"status": True, "message": "Staff member created successfully."}, status=201)
+        return Response({"status": True, "message": "Staff member created successfully."}, status=status.HTTP_201_CREATED)
 
 # ============================================================================
 # 2. OTP FLOW: SIGNUP & LOGIN
 # ============================================================================
-
 class SignupRequestOTPView(APIView):
     permission_classes = [AllowAny]
 
@@ -112,12 +74,11 @@ class SignupRequestOTPView(APIView):
         phone = request.data.get("phone_number")
 
         if not all([name, email, phone]):
-            return Response({"status": False, "message": "Name, Email, and Phone are required"}, status=400)
+            return Response({"status": False, "message": "Name, Email, and Phone are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         if User.objects.filter(phone_number=phone).exists():
-            return Response({"status": False, "message": "User already exists. Please Login."}, status=400)
+            return Response({"status": False, "message": "User already exists. Please Login."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Inactive user create cheyyunnu
         User.objects.create(
             username=phone,
             phone_number=phone,
@@ -133,7 +94,7 @@ class SignupRequestOTPView(APIView):
 
         return Response({
             "status": True, "message": "OTP sent!", "otp": otp_instance.otp 
-        }, status=200)
+        }, status=status.HTTP_200_OK)
 
 class LoginRequestOTPView(APIView):
     permission_classes = [AllowAny]
@@ -145,20 +106,21 @@ class LoginRequestOTPView(APIView):
             otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
             otp_instance.generate_otp()
             send_sms_otp(phone, otp_instance.otp)
-            return Response({"status": True, "message": "Login OTP sent!", "otp": otp_instance.otp}, status=200)
+            return Response({"status": True, "message": "Login OTP sent!", "otp": otp_instance.otp}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
-            return Response({"status": False, "message": "User not registered."}, status=404)
+            return Response({"status": False, "message": "User not registered."}, status=status.HTTP_404_NOT_FOUND)
 
 class ResendOTPView(APIView):
     permission_classes = [AllowAny]
+    
     def post(self, request):
         phone = request.data.get("phone_number")
         if not phone:
-            return Response({"status": False, "message": "Phone number required"}, status=400)
+            return Response({"status": False, "message": "Phone number required"}, status=status.HTTP_400_BAD_REQUEST)
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
         send_sms_otp(phone, otp_instance.otp)
-        return Response({"status": True, "message": "OTP Resent!", "otp": otp_instance.otp}, status=200)
+        return Response({"status": True, "message": "OTP Resent!", "otp": otp_instance.otp}, status=status.HTTP_200_OK)
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -176,14 +138,42 @@ class VerifyOTPView(APIView):
             user.save()
             
             otp_instance.delete()
-            response = Response({"status": True, "message": "Login Successful", "name": user.first_name}, status=200)
+            response = Response({"status": True, "message": "Login Successful", "name": user.first_name}, status=status.HTTP_200_OK)
             return set_jwt_cookies(response, user)
         except (PhoneOTP.DoesNotExist, User.DoesNotExist):
-            return Response({"status": False, "message": "Invalid OTP or Phone Number"}, status=400)
+            return Response({"status": False, "message": "Invalid OTP or Phone Number"}, status=status.HTTP_400_BAD_REQUEST)
 
 # ============================================================================
-# 3. LOGOUT (Clears BOTH Cookies)
+# 3. SESSION UTILITIES (Refresh & Logout)
 # ============================================================================
+class CookieTokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get('refresh_token')
+
+        if not refresh_token:
+            return Response({"status": False, "error": "No refresh token found"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            refresh = RefreshToken(refresh_token)
+            user_id = refresh.payload.get('user_id')
+            user = User.objects.get(id=user_id)
+
+            response = Response({"status": True, "message": "Token refreshed successfully"}, status=status.HTTP_200_OK)
+            
+            cookie_params = get_cookie_params()
+            response.set_cookie(key='access_token', value=str(refresh.access_token), max_age=3600, **cookie_params)
+            return response
+
+        except (TokenError, InvalidToken, User.DoesNotExist):
+            response = Response({"status": False, "error": "Invalid or expired token"}, status=status.HTTP_401_UNAUTHORIZED)
+            cookie_params = get_cookie_params()
+            # Valid paramaters upayogichu cookie delete cheyyunnu
+            response.delete_cookie('access_token', secure=cookie_params['secure'], samesite=cookie_params['samesite'], path=cookie_params['path'])
+            response.delete_cookie('refresh_token', secure=cookie_params['secure'], samesite=cookie_params['samesite'], path=cookie_params['path'])
+            return response
+
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
@@ -193,11 +183,7 @@ class LogoutView(APIView):
             "message": "Logged out successfully"
         }, status=status.HTTP_200_OK)
 
-        # 🛠️ Fix: Delete cheyyumpozhum same parameters venam!
-        # max_age=0 set cheyyunnathu browser-ne cookie udane delete cheyyan force cheyyum
         cookie_params = get_cookie_params()
-        
-        # 'httponly' delete_cookie-il valid argument alla, so athu ozhivakkanam
         delete_params = {
             'secure': cookie_params['secure'],
             'samesite': cookie_params['samesite'],
@@ -207,27 +193,24 @@ class LogoutView(APIView):
         response.delete_cookie('access_token', **delete_params)
         response.delete_cookie('refresh_token', **delete_params)
         
-        # Extra safety for stubborn browsers
+        # Extra force delete
         response.set_cookie('access_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **delete_params)
         response.set_cookie('refresh_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **delete_params)
 
         return response
 
 # ============================================================================
-# 4. PROFILE & SESSION
+# 4. PROFILE & ADDRESS MANAGEMENT
 # ============================================================================
 class VerifySessionView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
         user = request.user
-        
-        # 🛠️ FIX: User oru superuser aanu, pakshe role empty aanengil athu "admin" aakki kanikkanam
         assigned_role = user.role
         if not assigned_role and user.is_superuser:
             assigned_role = "admin"
             
-        # 🛠️ FIX: First name empty aanengil username (eg: 'admin') kanikkanam
         display_name = user.first_name if user.first_name else user.username
 
         return Response({
@@ -235,8 +218,8 @@ class VerifySessionView(APIView):
             "is_authenticated": True,
             "user": {
                 "id": user.id,
-                "role": assigned_role,       # Updated role
-                "name": display_name,        # Updated name
+                "role": assigned_role,
+                "name": display_name,
                 "phone_number": user.phone_number
             }
         }, status=status.HTTP_200_OK)
@@ -255,9 +238,6 @@ class UserProfileView(APIView):
             return Response({"status": True, "message": "Profile updated", "data": serializer.data}, status=status.HTTP_200_OK)
         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-# ============================================================================
-# 5. ADDRESS MANAGEMENT
-# ============================================================================
 class AddressListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
