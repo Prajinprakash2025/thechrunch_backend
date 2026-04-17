@@ -12,6 +12,7 @@ from .serializers import (
 )
 from .utils import send_sms_otp
 from .permissions import IsAdminOrStaff
+from rest_framework_simplejwt.exceptions import TokenError
 
 User = get_user_model()
 
@@ -32,6 +33,28 @@ def set_jwt_cookies(response, user):
     response.set_cookie(key='access_token', value=str(refresh.access_token), **cookie_params)
     response.set_cookie(key='refresh_token', value=str(refresh), **cookie_params)
     return response
+
+class CustomTokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get('refresh_token')
+
+        if not refresh_token:
+            return Response({"status": False, "message": "Refresh token missing"}, status=401)
+
+        try:
+            refresh = RefreshToken(refresh_token)
+            user_id = refresh.payload.get('user_id')
+            user = User.objects.get(id=user_id)
+
+            response = Response({"status": True, "message": "Token refreshed"}, status=200)
+            
+            # 🌟 Ivide nammal aa helper function thanne veendum vilikkunnu
+            return set_jwt_cookies(response, user, refresh)
+            
+        except (TokenError, User.DoesNotExist):
+            return Response({"status": False, "message": "Invalid token"}, status=401)
 
 # ============================================================================
 # 1. ADMIN & STAFF (Password Login)
@@ -148,9 +171,18 @@ class LogoutView(APIView):
 
     def post(self, request):
         response = Response({"status": True, "message": "Logged out successfully"}, status=status.HTTP_200_OK)
-        # 🌟 NEW: Delete both access and refresh cookies
-        response.delete_cookie('access_token')
-        response.delete_cookie('refresh_token')
+        
+        # 🛠️ FIX: Cookie delete cheyyumpol Samesite='None' & Secure=True nirbandhamanu!
+        # max_age=0 kodukkumpol browser athu udane delete cheyyum.
+        cookie_params = {
+            'httponly': True,
+            'secure': True,
+            'samesite': 'None',
+            'max_age': 0
+        }
+        
+        response.set_cookie('access_token', '', **cookie_params)
+        response.set_cookie('refresh_token', '', **cookie_params)
         return response
 
 # ============================================================================
