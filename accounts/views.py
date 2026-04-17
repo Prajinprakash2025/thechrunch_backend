@@ -205,20 +205,16 @@ class LogoutView(APIView):
             "message": "Logged out successfully"
         }, status=status.HTTP_200_OK)
 
-        # 🛠️ Same parameters used during login/refresh
+        # ✅ FIX: delete_cookie-il 'httponly' padilla. 
+        # Samesite and Secure mathram mathi.
         cookie_params = {
-            'httponly': True,
-            'secure': True,      # Production-il HTTPS aanennu urappakkuka
+            'secure': True,
             'samesite': 'None',
+            'path': '/', # Cookie set cheytha same path venam delete cheyyumpozhum
         }
 
-        # Clear Access Token
         response.delete_cookie('access_token', **cookie_params)
-        # Clear Refresh Token
         response.delete_cookie('refresh_token', **cookie_params)
-
-        # 💡 Extra Safety: Max Age 0 set cheyyunnathu nallathaanu
-        # response.set_cookie('access_token', '', max_age=0, **cookie_params)
         
         return response
 
