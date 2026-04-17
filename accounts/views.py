@@ -37,53 +37,51 @@ def set_jwt_cookies(response, user):
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
-class CustomTokenRefreshView(APIView):
+class CookieTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # 1. Cookie-il ninnu token edukkan shramikkunnu
+        # 1. Cookie-ൽ നിന്ന് refresh_token എടുക്കുന്നു
         refresh_token = request.COOKIES.get('refresh_token')
 
-        # 2. Token illengil 401 return cheyyunnu (500 error ozhivakkan)
         if not refresh_token:
-            return Response({
-                "status": False, 
-                "message": "Refresh token missing from cookies"
-            }, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"status": False, "error": "No refresh token found"}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
-            # 3. SimpleJWT upayogichu token validate cheyyunnu
+            # 2. ടോക്കൺ വാലിഡേറ്റ് ചെയ്യുന്നു
             refresh = RefreshToken(refresh_token)
             
-            # User-e kandupidikkunnu
+            # 3. യൂസർ ഐഡി എടുത്ത് യൂസർ ഉണ്ടോ എന്ന് ഉറപ്പിക്കുന്നു
             user_id = refresh.payload.get('user_id')
             user = User.objects.get(id=user_id)
+            
+            # പുതിയ ആക്സസ് ടോക്കൺ ഉണ്ടാക്കുന്നു
+            new_access_token = str(refresh.access_token)
 
-            # Success Response
-            response = Response({
-                "status": True, 
-                "message": "Token refreshed successfully"
-            }, status=status.HTTP_200_OK)
+            response = Response({"status": True, "message": "Token refreshed successfully"}, status=status.HTTP_200_OK)
 
-            # 4. Puthiya tokens cookies aayi thirichu set cheyyunnu (Helper function)
-            return set_jwt_cookies(response, user, refresh)
+            # 4. പുതിയ ആക്സസ് ടോക്കൺ കുക്കിയിലേക്ക് സെറ്റ് ചെയ്യുന്നു
+            # നിന്റെ സെറ്റിങ്‌സ് അനുസരിച്ച് താഴെ പറയുന്ന പാരാമീറ്ററുകൾ ശ്രദ്ധിക്കുക
+            response.set_cookie(
+                key='access_token',
+                value=new_access_token,
+                httponly=True,
+                secure=True,     # HTTPS നിർബന്ധം
+                samesite='None', # Cross-domain സപ്പോർട്ടിന്
+                max_age=3600     # 1 Hour
+            )
 
-        except (TokenError, InvalidToken):
-            return Response({
-                "status": False, 
-                "message": "Token is invalid or expired"
-            }, status=status.HTTP_401_UNAUTHORIZED)
-        except User.DoesNotExist:
-            return Response({
-                "status": False, 
-                "message": "User not found"
-            }, status=status.HTTP_401_UNAUTHORIZED)
+            return response
+
+        except (TokenError, InvalidToken, User.DoesNotExist):
+            # ടോക്കൺ ഇൻവാലിഡ് ആണെങ്കിൽ കുക്കീസ് ക്ലിയർ ചെയ്ത് 401 വിടുന്നു
+            response = Response({"status": False, "error": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+            response.delete_cookie('access_token')
+            response.delete_cookie('refresh_token')
+            return response
         except Exception as e:
-            # Athyavishyamulla ella errors-um ivide catch cheyyum
-            return Response({
-                "status": False, 
-                "message": "An unexpected error occurred"
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # മറ്റെന്തെങ്കിലും എറർ വന്നാൽ 500 എറർ വരാതെ സേഫ് ആയി ഹാൻഡിൽ ചെയ്യുന്നു
+            return Response({"status": False, "error": "An unexpected error occurred"}, status=status.HTTP_401_UNAUTHORIZED)
 
 # ============================================================================
 # 1. ADMIN & STAFF (Password Login)
