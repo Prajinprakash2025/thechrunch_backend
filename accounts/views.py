@@ -197,19 +197,26 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        response = Response({"status": True, "message": "Logged out successfully"}, status=status.HTTP_200_OK)
-        
-        # 🛠️ FIX: Cookie delete cheyyumpol Samesite='None' & Secure=True nirbandhamanu!
-        # max_age=0 kodukkumpol browser athu udane delete cheyyum.
+        response = Response({
+            "status": True, 
+            "message": "Logged out successfully"
+        }, status=status.HTTP_200_OK)
+
+        # 🛠️ Same parameters used during login/refresh
         cookie_params = {
             'httponly': True,
-            'secure': True,
+            'secure': True,      # Production-il HTTPS aanennu urappakkuka
             'samesite': 'None',
-            'max_age': 0
         }
+
+        # Clear Access Token
+        response.delete_cookie('access_token', **cookie_params)
+        # Clear Refresh Token
+        response.delete_cookie('refresh_token', **cookie_params)
+
+        # 💡 Extra Safety: Max Age 0 set cheyyunnathu nallathaanu
+        # response.set_cookie('access_token', '', max_age=0, **cookie_params)
         
-        response.set_cookie('access_token', '', **cookie_params)
-        response.set_cookie('refresh_token', '', **cookie_params)
         return response
 
 # ============================================================================
