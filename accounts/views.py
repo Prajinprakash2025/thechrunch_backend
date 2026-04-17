@@ -38,19 +38,20 @@ class CustomTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # 🌟 IVIDE NOKKU: Cookie-il ninnum token edukunnundo?
         refresh_token = request.COOKIES.get('refresh_token')
 
         if not refresh_token:
             return Response({"status": False, "message": "Refresh token missing"}, status=401)
 
         try:
-            refresh = RefreshToken(refresh_token)
+            refresh = RefreshToken(refresh_token) # Cookie token upayogikkunnu
             user_id = refresh.payload.get('user_id')
             user = User.objects.get(id=user_id)
 
             response = Response({"status": True, "message": "Token refreshed"}, status=200)
             
-            # 🌟 Ivide nammal aa helper function thanne veendum vilikkunnu
+            # Helper function vechu puthiya access token set cheyyunnu
             return set_jwt_cookies(response, user, refresh)
             
         except (TokenError, User.DoesNotExist):
