@@ -201,21 +201,14 @@ class LogoutView(APIView):
 
     def post(self, request):
         response = Response({
-            "status": True, 
+            "status": True,
             "message": "Logged out successfully"
         }, status=status.HTTP_200_OK)
 
-        # ✅ FIX: delete_cookie-il 'httponly' padilla. 
-        # Samesite and Secure mathram mathi.
-        cookie_params = {
-            'secure': True,
-            'samesite': 'None',
-            'path': '/', # Cookie set cheytha same path venam delete cheyyumpozhum
-        }
+        # ✅ Minimal & safe
+        response.delete_cookie('access_token', path='/')
+        response.delete_cookie('refresh_token', path='/')
 
-        response.delete_cookie('access_token', **cookie_params)
-        response.delete_cookie('refresh_token', **cookie_params)
-        
         return response
 
 # ============================================================================
