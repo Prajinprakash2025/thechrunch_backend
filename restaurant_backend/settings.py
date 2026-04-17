@@ -195,17 +195,18 @@ if not firebase_admin._apps:
 
 
 REST_FRAMEWORK = {
-    # This tells Django to actively look for Bearer JWT Tokens!
+    # This tells Django to use our custom Cookie Authentication class!
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    
-    # 🚀 THE FIX: Add this new section for Global Permissions
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny', # Default permission
-        'accounts.permissions.IsNotBlocked',   # Our new block check permission
+        'accounts.authentication.CookieJWTAuthentication', 
     ),
 
+    # Add this new section for Global Permissions (Blocks access for blocked users)
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny', # Default permission
+        'accounts.permissions.IsNotBlocked',   # Our custom block check permission
+    ),
+    
+    # ... baki throttling okke same thanne ...
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.ScopedRateThrottle',
     ],

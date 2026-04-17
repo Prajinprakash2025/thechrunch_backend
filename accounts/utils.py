@@ -44,3 +44,21 @@ def send_whatsapp_otp(phone_number, otp):
     except Exception as e:
         print("WhatsApp Error:", str(e))
         return None
+    
+# ==========================================
+# 4. SEND OTP (SMS / WhatsApp)
+# ==========================================
+def send_sms_otp(phone_number, otp):
+    """
+    Function to send OTP to the user.
+    You can use Twilio or Meta API here.
+    """
+    # Ippo thalkkalathinu terminal-il print cheyyan ulla code (Testing-nu vendi)
+    print(f"--------------------------------------------------")
+    print(f"📲 SENDING OTP TO {phone_number}: {otp}")
+    print(f"--------------------------------------------------")
+    
+    # Nammal nerathe paranja Twilio/Meta code ivide add cheyyam
+    # Eg: client.messages.create(...)
+
+    return True

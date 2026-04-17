@@ -1,144 +1,140 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from rest_framework import generics
-from .utils import send_whatsapp_otp  # 🌟 ഇംപോർട്ട് ചേർക്കുക
+from django.conf import settings
 from .models import PhoneOTP, Address
-from .serializers import LoginSerializer, VerifyOTPSerializer, UserProfileSerializer, AddressSerializer
-from .permissions import IsAdminUser
+from .serializers import (
+    LoginSerializer, SendOTPSerializer, VerifyOTPSerializer, 
+    UserProfileSerializer, AddressSerializer
+)
+from .utils import send_sms_otp
+from .permissions import IsAdminOrStaff
 
 User = get_user_model()
 
-# ============================================================
-# CUSTOM JWT LOGIN TO HANDLE BLOCKED USERS
-# ============================================================
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    def validate(self, attrs):
-        data = super().validate(attrs)
-        if self.user.is_blocked:
-            raise AuthenticationFailed("Your account has been blocked. Please contact Crunch.")
-        return data
+# ============================================================================
+# HELPER FUNCTION: To set Token in HTTP-Only Cookie
+# ============================================================================
+def set_jwt_cookies(response, user):
+    """Generates JWT and attaches BOTH access and refresh tokens as HTTP-Only cookies"""
+    refresh = RefreshToken.for_user(user)
+    access_token = str(refresh.access_token)
+    refresh_token = str(refresh) # 🌟 NEW: Get the refresh token string
+    
+    # 1. Set Access Token Cookie
+    response.set_cookie(
+        key='access_token',
+        value=access_token,
+        httponly=True,   
+        secure=False,     # ⚠️ Set to True for Production (HTTPS). False for local HTTP testing.
+        samesite='None', 
+        max_age=3600 * 24 * 7 # 7 Days expiry
+    )
+    
+    # 2. Set Refresh Token Cookie (🌟 NEW)
+    response.set_cookie(
+        key='refresh_token',
+        value=refresh_token,
+        httponly=True,   
+        secure=False,     # ⚠️ Set to True for Production (HTTPS).
+        samesite='None', 
+        max_age=3600 * 24 * 30 # 30 Days expiry for refresh token
+    )
+    
+    return response
 
-class CustomTokenLoginView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
-
-
-# ============================================================
-# 1. ADMIN & STAFF: PASSWORD LOGIN
-# ============================================================
+# ============================================================================
+# 1. ADMIN & STAFF (Password Login)
+# ============================================================================
 class LoginView(APIView):
-    permission_classes = [AllowAny] 
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data["user"]
-        
-        # Check if user is blocked
-        if user.is_blocked:
-            return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
+        if serializer.is_valid():
+            user = serializer.validated_data["user"]
+            
+            response_data = {
+                "status": True,
+                "message": "Login successful",
+                "role": user.role,
+                "user_id": user.id,
+                "name": user.first_name,
+            }
+            
+            response = Response(response_data, status=status.HTTP_200_OK)
+            return set_jwt_cookies(response, user)
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        refresh = RefreshToken.for_user(user)
+# CREATE STAFF VIEW (With Permissions)
+class CreateStaffView(APIView):
+    permission_classes = [IsAdminOrStaff]
 
-        if user.is_superuser and not user.role:
-            role = "admin" 
-        elif user.role:
-            role = user.role
-        else:
-            role = "unknown"
-
+    def post(self, request):
         return Response({
             "status": True,
-            "message": "Login successful",
-            "role": role,
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-        }, status=status.HTTP_200_OK)
+            "message": "Staff member created successfully."
+        }, status=status.HTTP_201_CREATED)
 
-
-# ============================================================
-# 2. OTP FLOW: SIGNUP - STEP 1 (Request OTP)
-# ============================================================
-class SignupRequestOTPView(APIView):
+# ============================================================================
+# 2. OTP FLOW: SIGNUP & LOGIN
+# ============================================================================
+class BaseSendOTPView(APIView):
     permission_classes = [AllowAny]
-    throttle_scope = 'otp_requests' 
 
-    def post(self, request):
-        phone = request.data.get("phone_number")
-        name = request.data.get("name", "")
-        email = request.data.get("email", "")
+    def process_otp_request(self, request, is_login=False):
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = serializer.validated_data["phone_number"]
 
-        if not phone or not name:
-            return Response({"status": False, "message": "Phone and Name are required"}, status=status.HTTP_400_BAD_REQUEST)
+        user_exists = User.objects.filter(phone_number=phone).exists()
 
-        if User.objects.filter(phone_number=phone).exists():
-            return Response({"status": False, "message": "User already exists. Please login."}, status=status.HTTP_400_BAD_REQUEST)
-
-        otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
-        otp_instance.name = name   
-        otp_instance.email = email 
-        otp_instance.generate_otp() 
+        if is_login and not user_exists:
+            return Response({"status": False, "message": "Phone number not registered. Please sign up."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # 🌟 WhatsApp വഴി OTP അയക്കുന്നു
-        send_whatsapp_otp(phone, otp_instance.otp)
+        if not is_login and user_exists:
+            return Response({"status": False, "message": "Phone number already registered. Please login."}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
+        otp_instance.generate_otp()
         
-        return Response({
-            "status": True, 
-            "message": "OTP sent via WhatsApp!",
-            "data": {"test_otp": otp_instance.otp} # ടെസ്റ്റിംഗ് കഴിഞ്ഞ് ഇത് മാറ്റാം
-        }, status=status.HTTP_200_OK)
+        if not getattr(settings, 'TESTING', False):
+             send_sms_otp(phone, otp_instance.otp)
 
+        return Response({"status": True, "message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
 
-# ============================================================
-# 3. OTP FLOW: SIGNUP & LOGIN - STEP 2 (Resend OTP)
-# ============================================================
-class ResendOTPView(APIView):
-    permission_classes = [AllowAny]
-    throttle_scope = 'otp_requests' 
-
+class SignupRequestOTPView(BaseSendOTPView):
     def post(self, request):
-        phone = request.data.get("phone_number")
+        return self.process_otp_request(request, is_login=False)
 
-        try:
-            otp_instance = PhoneOTP.objects.get(phone_number=phone)
-            
-            if otp_instance.is_data_expired():
-                otp_instance.delete()
-                return Response({"status": False, "message": "Session expired. Please start signup again."}, status=status.HTTP_400_BAD_REQUEST)
+class LoginRequestOTPView(BaseSendOTPView):
+    def post(self, request):
+        return self.process_otp_request(request, is_login=True)
 
-            otp_instance.generate_otp()
+class ResendOTPView(BaseSendOTPView):
+    def post(self, request):
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = serializer.validated_data["phone_number"]
 
-            # 🌟 WhatsApp വഴി പുതിയ OTP അയക്കുന്നു
-            send_whatsapp_otp(phone, otp_instance.otp)
+        user_exists = User.objects.filter(phone_number=phone).exists()
+        return self.process_otp_request(request, is_login=user_exists)
 
-            return Response({
-                "status": True, 
-                "message": "New OTP sent via WhatsApp!",
-                "data": {"test_otp": otp_instance.otp}
-            }, status=status.HTTP_200_OK)
-
-        except PhoneOTP.DoesNotExist:
-            return Response({"status": False, "message": "No session found. Please request OTP first."}, status=status.HTTP_400_BAD_REQUEST)
-
-# ============================================================
-# 4. OTP FLOW: SIGNUP & LOGIN - STEP 3 (Verify OTP)
-# ============================================================
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
+        
         phone = serializer.validated_data["phone_number"]
         otp = serializer.validated_data["otp"]
+        name = serializer.validated_data.get("name", "")
+        email = serializer.validated_data.get("email", "")
 
         try:
             otp_instance = PhoneOTP.objects.get(phone_number=phone, otp=otp)
@@ -152,146 +148,115 @@ class VerifyOTPView(APIView):
             phone_number=phone,
             defaults={
                 "username": phone,
-                "first_name": otp_instance.name if otp_instance.name else "",
-                "email": otp_instance.email if otp_instance.email else "",
-                "role": "user"
+                "first_name": name, 
+                "email": email, 
+                "role": "user",
+                "is_phone_verified": True
             }
         )
-        
-        if user.is_blocked:
-            return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
 
-        if created:
-            user.set_unusable_password()
-            user.save()
+        if not created and not user.is_active:
+            return Response({"status": False, "message": "Account disabled."}, status=status.HTTP_400_BAD_REQUEST)
 
         otp_instance.delete()
 
-        refresh = RefreshToken.for_user(user)
-        
-        # --- Ivideyanu change varuthiyath ---
-        return Response({
+        response_data = {
             "status": True,
             "message": "Verification successful!",
-            "first_name": user.first_name, # <-- Puthiyathayi add cheythathu
+            "is_new_user": created,
             "role": user.role,
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-        }, status=status.HTTP_200_OK)
+            "name": user.first_name,
+        }
 
+        response = Response(response_data, status=status.HTTP_200_OK)
+        return set_jwt_cookies(response, user)
 
-# ============================================================
-# 5. OTP FLOW: LOGIN - STEP 1 (Request Login OTP)
-# ============================================================
-class LoginRequestOTPView(APIView):
+# ============================================================================
+# 3. LOGOUT (Clears BOTH Cookies)
+# ============================================================================
+class LogoutView(APIView):
     permission_classes = [AllowAny]
-    throttle_scope = 'otp_requests' 
 
     def post(self, request):
-        phone = request.data.get("phone_number")
+        response = Response({"status": True, "message": "Logged out successfully"}, status=status.HTTP_200_OK)
+        # 🌟 NEW: Delete both access and refresh cookies
+        response.delete_cookie('access_token')
+        response.delete_cookie('refresh_token')
+        return response
 
-        try:
-            user = User.objects.get(phone_number=phone)
-            if user.is_blocked:
-                return Response({"status": False, "message": "Your account has been blocked. Please contact Crunch."}, status=status.HTTP_403_FORBIDDEN)
-        except User.DoesNotExist:
-            return Response({"status": False, "message": "Please Signup"}, status=status.HTTP_400_BAD_REQUEST)
-
-        otp_instance, created = PhoneOTP.objects.get_or_create(phone_number=phone)
-        otp_instance.generate_otp()
-
-        # 🌟 WhatsApp വഴി OTP അയക്കുന്നു
-        send_whatsapp_otp(phone, otp_instance.otp)
-
-        return Response({
-            "status": True, 
-            "message": "Login OTP sent via WhatsApp!",
-            "data": {"test_otp": otp_instance.otp}
-        }, status=status.HTTP_200_OK)
-
-
-# ============================================================
-# 6. ADMIN UTILITY: CREATE STAFF 
-# ============================================================
-class CreateStaffView(APIView): 
-    permission_classes = [IsAuthenticated, IsAdminUser] 
-
-    def post(self, request):
-        username = request.data.get("username")
-        password = request.data.get("password")
-        phone_number = request.data.get("phone_number")
-
-        if not username or not password:
-            return Response({"status": False, "message": "Username and password required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if User.objects.filter(username=username).exists():
-            return Response({"status": False, "message": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = User.objects.create_user(
-            username=username,
-            password=password,
-            phone_number=phone_number,
-            role="staff" 
-        )
+# ============================================================================
+# 4. PROFILE & SESSION
+# ============================================================================
+class VerifySessionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # 🛠️ FIX: User oru superuser aanu, pakshe role empty aanengil athu "admin" aakki kanikkanam
+        assigned_role = user.role
+        if not assigned_role and user.is_superuser:
+            assigned_role = "admin"
+            
+        # 🛠️ FIX: First name empty aanengil username (eg: 'admin') kanikkanam
+        display_name = user.first_name if user.first_name else user.username
 
         return Response({
             "status": True,
-            "message": "Staff account created successfully",
-            "username": user.username
-        }, status=status.HTTP_201_CREATED)
+            "is_authenticated": True,
+            "user": {
+                "id": user.id,
+                "role": assigned_role,       # Updated role
+                "name": display_name,        # Updated name
+                "phone_number": user.phone_number
+            }
+        }, status=status.HTTP_200_OK)
 
-
-# ============================================================
-# 7. SESSION UTILITIES (Verify Token & Logout)
-# ============================================================
-class VerifySessionView(APIView):
+class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response({
-            "authenticated": True,
-            "user_id": request.user.id,
-            "username": request.user.username
-        })
-    
+        serializer = UserProfileSerializer(request.user)
+        return Response({"status": True, "data": serializer.data}, status=status.HTTP_200_OK)
 
-# ============================================================
-# 8. USER PROFILE (View & Update)
-# ============================================================
-class UserProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserProfileSerializer
-    permission_classes = [IsAuthenticated] 
+    def patch(self, request):
+        serializer = UserProfileSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": True, "message": "Profile updated", "data": serializer.data}, status=status.HTTP_200_OK)
+        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-    def get_object(self):
-        return self.request.user
-
-
-# ============================================================
-# 9. ADDRESS MANAGEMENT
-# ============================================================
-class AddressListCreateView(generics.ListCreateAPIView):
-    serializer_class = AddressSerializer
+# ============================================================================
+# 5. ADDRESS MANAGEMENT
+# ============================================================================
+class AddressListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        return Address.objects.filter(user=self.request.user).order_by('-is_default', '-id')
-
-class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = AddressSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Address.objects.filter(user=self.request.user)
-
-
-class LogoutView(APIView):
-    permission_classes = (IsAuthenticated,)
+    def get(self, request):
+        addresses = Address.objects.filter(user=request.user).order_by('-is_default', '-id')
+        serializer = AddressSerializer(addresses, many=True)
+        return Response({"status": True, "data": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request):
+        serializer = AddressSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": True, "message": "Address added", "data": serializer.data}, status=status.HTTP_201_CREATED)
+        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+class AddressDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk, user):
         try:
-            refresh_token = request.data["refresh"]
-            token = RefreshToken(refresh_token)
-            token.blacklist() 
-            return Response({"message": "Successfully logged out"}, status=status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+            return Address.objects.get(pk=pk, user=user)
+        except Address.DoesNotExist:
+            return None
+
+    def delete(self, request, pk):
+        address = self.get_object(pk, request.user)
+        if not address:
+            return Response({"status": False, "message": "Address not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        address.delete()
+        return Response({"status": True, "message": "Address deleted"}, status=status.HTTP_200_OK)

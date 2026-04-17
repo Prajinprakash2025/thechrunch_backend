@@ -1,5 +1,5 @@
 from rest_framework.permissions import BasePermission
-from rest_framework.exceptions import PermissionDenied  
+from rest_framework.exceptions import PermissionDenied
 
 class IsSuperAdmin(BasePermission):
     def has_permission(self, request, view):
