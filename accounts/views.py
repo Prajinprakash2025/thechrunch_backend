@@ -113,9 +113,43 @@ class BaseSendOTPView(APIView):
             "otp": otp_instance.otp  # Frontend-karanu ithu Toast-il kaanikkan patum
         }, status=status.HTTP_200_OK)
 
-class SignupRequestOTPView(BaseSendOTPView):
+class SignupRequestOTPView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        return self.process_otp_request(request, is_login=False)
+        # 1. User details muzhuvanum vangiyittu mathram OTP ayakkunnu
+        name = request.data.get("name")
+        email = request.data.get("email")
+        phone = request.data.get("phone_number")
+
+        if not name or not email or not phone:
+            return Response({"status": False, "message": "All fields are required"}, status=400)
+
+        # 2. OTP ayakkunnathinu munpu User-e database-il save cheyyunnu
+        # (is_active=False kodukkunnathu OTP verify cheyyathathukondu)
+        user, created = User.objects.get_or_create(
+            phone_number=phone,
+            defaults={
+                "username": phone,
+                "first_name": name,
+                "email": email,
+                "is_active": False, # OTP verify aayittilla
+                "role": "user"
+            }
+        )
+
+        # 3. OTP Generate cheyyunnu
+        otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
+        otp_instance.generate_otp()
+        
+        # Terminal-il OTP print cheyyunnu (Toast-il kanikkan response-ilum ayakkunnu)
+        send_sms_otp(phone, otp_instance.otp)
+
+        return Response({
+            "status": True, 
+            "message": "User details saved and OTP sent successfully!",
+            "otp": otp_instance.otp  # Toast-il kaanikkan
+        }, status=status.HTTP_200_OK)
 
 class LoginRequestOTPView(BaseSendOTPView):
     def post(self, request):
@@ -132,50 +166,32 @@ class ResendOTPView(BaseSendOTPView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
-
     def post(self, request):
-        serializer = VerifyOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        phone = serializer.validated_data["phone_number"]
-        otp = serializer.validated_data["otp"]
-        name = serializer.validated_data.get("name", "")
-        email = serializer.validated_data.get("email", "")
+        phone = request.data.get("phone_number")
+        otp = request.data.get("otp")
 
         try:
             otp_instance = PhoneOTP.objects.get(phone_number=phone, otp=otp)
-        except PhoneOTP.DoesNotExist:
-            return Response({"status": False, "message": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 1. OTP correct aanengil User-e active aakkunnu
+            user = User.objects.get(phone_number=phone)
+            user.is_active = True
+            user.is_phone_verified = True
+            user.save()
+            
+            # 2. OTP delete cheyyunnu
+            otp_instance.delete()
 
-        if otp_instance.is_otp_expired():
-            return Response({"status": False, "message": "OTP expired. Please click resend."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user, created = User.objects.get_or_create(
-            phone_number=phone,
-            defaults={
-                "username": phone,
-                "first_name": name, 
-                "email": email, 
-                "role": "user",
-                "is_phone_verified": True
-            }
-        )
-
-        if not created and not user.is_active:
-            return Response({"status": False, "message": "Account disabled."}, status=status.HTTP_400_BAD_REQUEST)
-
-        otp_instance.delete()
-
-        response_data = {
-            "status": True,
-            "message": "Verification successful!",
-            "is_new_user": created,
-            "role": user.role,
-            "name": user.first_name,
-        }
-
-        response = Response(response_data, status=status.HTTP_200_OK)
-        return set_jwt_cookies(response, user)
+            # 3. Login Cookies set cheyyunnu
+            response = Response({
+                "status": True, 
+                "message": "Account verified and logged in!",
+                "name": user.first_name
+            }, status=200)
+            return set_jwt_cookies(response, user)
+            
+        except (PhoneOTP.DoesNotExist, User.DoesNotExist):
+            return Response({"status": False, "message": "Invalid OTP or User not found"}, status=400)
 
 # ============================================================================
 # 3. LOGOUT (Clears BOTH Cookies)
