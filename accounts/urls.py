@@ -10,7 +10,7 @@ from .views import (
     LogoutView,
     UserProfileView,
     AddressListCreateView,
-    AddressDetailView,CustomTokenRefreshView
+    AddressDetailView,CookieTokenRefreshView
 )
 
 urlpatterns = [
@@ -34,7 +34,7 @@ urlpatterns = [
     # ==========================================
     # 3. SESSION UTILITIES
     # ==========================================
-    path('refresh-token/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('refresh-token/', CookieTokenRefreshView.as_view(), name='token_refresh'),
     path('verify-session/', VerifySessionView.as_view(), name='verify_session'),
     path('logout/', LogoutView.as_view(), name='logout'),
 ]
