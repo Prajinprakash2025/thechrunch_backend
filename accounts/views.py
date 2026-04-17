@@ -169,9 +169,10 @@ class CookieTokenRefreshView(APIView):
         except (TokenError, InvalidToken, User.DoesNotExist):
             response = Response({"status": False, "error": "Invalid or expired token"}, status=status.HTTP_401_UNAUTHORIZED)
             cookie_params = get_cookie_params()
-            # Valid paramaters upayogichu cookie delete cheyyunnu
-            response.delete_cookie('access_token', secure=cookie_params['secure'], samesite=cookie_params['samesite'], path=cookie_params['path'])
-            response.delete_cookie('refresh_token', secure=cookie_params['secure'], samesite=cookie_params['samesite'], path=cookie_params['path'])
+            
+            # 🛠️ FIX: TypeError ഒഴിവാക്കാൻ delete_cookie-ക്ക് പകരം set_cookie ഉപയോഗിച്ച് expire ആക്കുന്നു
+            response.set_cookie('access_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **cookie_params)
+            response.set_cookie('refresh_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **cookie_params)
             return response
 
 class LogoutView(APIView):
@@ -184,18 +185,11 @@ class LogoutView(APIView):
         }, status=status.HTTP_200_OK)
 
         cookie_params = get_cookie_params()
-        delete_params = {
-            'secure': cookie_params['secure'],
-            'samesite': cookie_params['samesite'],
-            'path': cookie_params['path']
-        }
-
-        response.delete_cookie('access_token', **delete_params)
-        response.delete_cookie('refresh_token', **delete_params)
         
-        # Extra force delete
-        response.set_cookie('access_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **delete_params)
-        response.set_cookie('refresh_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **delete_params)
+        # 🛠️ FIX: TypeError ഒഴിവാക്കാൻ delete_cookie ഉപയോഗിക്കുന്നില്ല. 
+        # പകരം ഒറിജിനൽ പാരാമീറ്ററുകൾ വെച്ച് തന്നെ കുക്കി Force Expire ചെയ്യുന്നു.
+        response.set_cookie('access_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **cookie_params)
+        response.set_cookie('refresh_token', '', max_age=0, expires='Thu, 01 Jan 1970 00:00:00 GMT', **cookie_params)
 
         return response
 
