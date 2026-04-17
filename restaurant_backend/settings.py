@@ -162,6 +162,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://thecrunchindia.com",
 
 ]
+CORS_ALLOW_CREDENTIALS = True
 
 # Email Settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
