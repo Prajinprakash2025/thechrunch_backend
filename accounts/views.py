@@ -94,18 +94,24 @@ class BaseSendOTPView(APIView):
         user_exists = User.objects.filter(phone_number=phone).exists()
 
         if is_login and not user_exists:
-            return Response({"status": False, "message": "Phone number not registered. Please sign up."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": False, "message": "User not found. Please register."}, status=400)
         
         if not is_login and user_exists:
-            return Response({"status": False, "message": "Phone number already registered. Please login."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": False, "message": "User already exists. Please login."}, status=400)
 
+        # OTP Generate cheyyunnu
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
         
-        if not getattr(settings, 'TESTING', False):
-             send_sms_otp(phone, otp_instance.otp)
+        # Terminal-il print cheyyunnu
+        send_sms_otp(phone, otp_instance.otp)
 
-        return Response({"status": True, "message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
+        # 🚀 🚀 TOAST-IL KAANIKKAN VENDI OTP RESPONSE-IL AYAKKUNNU 🚀 🚀
+        return Response({
+            "status": True, 
+            "message": "OTP sent successfully!",
+            "otp": otp_instance.otp  # Frontend-karanu ithu Toast-il kaanikkan patum
+        }, status=status.HTTP_200_OK)
 
 class SignupRequestOTPView(BaseSendOTPView):
     def post(self, request):
