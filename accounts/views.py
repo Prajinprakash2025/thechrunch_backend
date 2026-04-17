@@ -19,31 +19,18 @@ User = get_user_model()
 # HELPER FUNCTION: To set Token in HTTP-Only Cookie
 # ============================================================================
 def set_jwt_cookies(response, user):
-    """Generates JWT and attaches BOTH access and refresh tokens as HTTP-Only cookies"""
+    """Generates Access & Refresh tokens and sets them as HTTP-Only Cookies"""
     refresh = RefreshToken.for_user(user)
-    access_token = str(refresh.access_token)
-    refresh_token = str(refresh) # 🌟 NEW: Get the refresh token string
     
-    # 1. Set Access Token Cookie
-    response.set_cookie(
-        key='access_token',
-        value=access_token,
-        httponly=True,   
-        secure=False,     # ⚠️ Set to True for Production (HTTPS). False for local HTTP testing.
-        samesite='None', 
-        max_age=3600 * 24 * 7 # 7 Days expiry
-    )
+    cookie_params = {
+        'httponly': True,
+        'secure': False,  # ⚠️ Production-il (HTTPS) True aakkanam
+        'samesite': 'Lax',
+        'max_age': 3600 * 24 * 7 # 7 Days
+    }
     
-    # 2. Set Refresh Token Cookie (🌟 NEW)
-    response.set_cookie(
-        key='refresh_token',
-        value=refresh_token,
-        httponly=True,   
-        secure=False,     # ⚠️ Set to True for Production (HTTPS).
-        samesite='None', 
-        max_age=3600 * 24 * 30 # 30 Days expiry for refresh token
-    )
-    
+    response.set_cookie(key='access_token', value=str(refresh.access_token), **cookie_params)
+    response.set_cookie(key='refresh_token', value=str(refresh), **cookie_params)
     return response
 
 # ============================================================================
@@ -56,142 +43,102 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data["user"]
-            
-            response_data = {
+            response = Response({
                 "status": True,
                 "message": "Login successful",
-                "role": user.role,
-                "user_id": user.id,
+                "role": user.role or "admin",
                 "name": user.first_name,
-            }
-            
-            response = Response(response_data, status=status.HTTP_200_OK)
+            }, status=status.HTTP_200_OK)
             return set_jwt_cookies(response, user)
-            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# CREATE STAFF VIEW (With Permissions)
 class CreateStaffView(APIView):
     permission_classes = [IsAdminOrStaff]
-
     def post(self, request):
-        return Response({
-            "status": True,
-            "message": "Staff member created successfully."
-        }, status=status.HTTP_201_CREATED)
+        # Staff creation logic ivide add cheyyam
+        return Response({"status": True, "message": "Staff member created successfully."}, status=201)
 
 # ============================================================================
 # 2. OTP FLOW: SIGNUP & LOGIN
 # ============================================================================
-class BaseSendOTPView(APIView):
-    permission_classes = [AllowAny]
-
-    def process_otp_request(self, request, is_login=False):
-        serializer = SendOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        phone = serializer.validated_data["phone_number"]
-
-        user_exists = User.objects.filter(phone_number=phone).exists()
-
-        if is_login and not user_exists:
-            return Response({"status": False, "message": "User not found. Please register."}, status=400)
-        
-        if not is_login and user_exists:
-            return Response({"status": False, "message": "User already exists. Please login."}, status=400)
-
-        # OTP Generate cheyyunnu
-        otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
-        otp_instance.generate_otp()
-        
-        # Terminal-il print cheyyunnu
-        send_sms_otp(phone, otp_instance.otp)
-
-        # 🚀 🚀 TOAST-IL KAANIKKAN VENDI OTP RESPONSE-IL AYAKKUNNU 🚀 🚀
-        return Response({
-            "status": True, 
-            "message": "OTP sent successfully!",
-            "otp": otp_instance.otp  # Frontend-karanu ithu Toast-il kaanikkan patum
-        }, status=status.HTTP_200_OK)
 
 class SignupRequestOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # 1. User details muzhuvanum vangiyittu mathram OTP ayakkunnu
         name = request.data.get("name")
         email = request.data.get("email")
         phone = request.data.get("phone_number")
 
-        if not name or not email or not phone:
-            return Response({"status": False, "message": "All fields are required"}, status=400)
+        if not all([name, email, phone]):
+            return Response({"status": False, "message": "Name, Email, and Phone are required"}, status=400)
 
-        # 2. OTP ayakkunnathinu munpu User-e database-il save cheyyunnu
-        # (is_active=False kodukkunnathu OTP verify cheyyathathukondu)
-        user, created = User.objects.get_or_create(
+        if User.objects.filter(phone_number=phone).exists():
+            return Response({"status": False, "message": "User already exists. Please Login."}, status=400)
+
+        # Inactive user create cheyyunnu
+        User.objects.create(
+            username=phone,
             phone_number=phone,
-            defaults={
-                "username": phone,
-                "first_name": name,
-                "email": email,
-                "is_active": False, # OTP verify aayittilla
-                "role": "user"
-            }
+            first_name=name,
+            email=email,
+            is_active=False,
+            role="user"
         )
 
-        # 3. OTP Generate cheyyunnu
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
-        
-        # Terminal-il OTP print cheyyunnu (Toast-il kanikkan response-ilum ayakkunnu)
         send_sms_otp(phone, otp_instance.otp)
 
         return Response({
-            "status": True, 
-            "message": "User details saved and OTP sent successfully!",
-            "otp": otp_instance.otp  # Toast-il kaanikkan
-        }, status=status.HTTP_200_OK)
+            "status": True, "message": "OTP sent!", "otp": otp_instance.otp 
+        }, status=200)
 
-class LoginRequestOTPView(BaseSendOTPView):
+class LoginRequestOTPView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        return self.process_otp_request(request, is_login=True)
+        phone = request.data.get("phone_number")
+        try:
+            user = User.objects.get(phone_number=phone)
+            otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
+            otp_instance.generate_otp()
+            send_sms_otp(phone, otp_instance.otp)
+            return Response({"status": True, "message": "Login OTP sent!", "otp": otp_instance.otp}, status=200)
+        except User.DoesNotExist:
+            return Response({"status": False, "message": "User not registered."}, status=404)
 
-class ResendOTPView(BaseSendOTPView):
+class ResendOTPView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
-        serializer = SendOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        phone = serializer.validated_data["phone_number"]
-
-        user_exists = User.objects.filter(phone_number=phone).exists()
-        return self.process_otp_request(request, is_login=user_exists)
+        phone = request.data.get("phone_number")
+        if not phone:
+            return Response({"status": False, "message": "Phone number required"}, status=400)
+        otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
+        otp_instance.generate_otp()
+        send_sms_otp(phone, otp_instance.otp)
+        return Response({"status": True, "message": "OTP Resent!", "otp": otp_instance.otp}, status=200)
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         phone = request.data.get("phone_number")
         otp = request.data.get("otp")
 
         try:
             otp_instance = PhoneOTP.objects.get(phone_number=phone, otp=otp)
-            
-            # 1. OTP correct aanengil User-e active aakkunnu
             user = User.objects.get(phone_number=phone)
+            
             user.is_active = True
             user.is_phone_verified = True
             user.save()
             
-            # 2. OTP delete cheyyunnu
             otp_instance.delete()
-
-            # 3. Login Cookies set cheyyunnu
-            response = Response({
-                "status": True, 
-                "message": "Account verified and logged in!",
-                "name": user.first_name
-            }, status=200)
+            response = Response({"status": True, "message": "Login Successful", "name": user.first_name}, status=200)
             return set_jwt_cookies(response, user)
-            
         except (PhoneOTP.DoesNotExist, User.DoesNotExist):
-            return Response({"status": False, "message": "Invalid OTP or User not found"}, status=400)
+            return Response({"status": False, "message": "Invalid OTP or Phone Number"}, status=400)
 
 # ============================================================================
 # 3. LOGOUT (Clears BOTH Cookies)
