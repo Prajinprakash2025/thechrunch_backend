@@ -256,6 +256,19 @@ class AddressDetailView(APIView):
         except Address.DoesNotExist:
             return None
 
+    # 🌟 NEW: Address അപ്ഡേറ്റ് ചെയ്യാൻ വേണ്ടിയുള്ള PATCH method
+    def patch(self, request, pk):
+        address = self.get_object(pk, request.user)
+        if not address:
+            return Response({"status": False, "message": "Address not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        serializer = AddressSerializer(address, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": True, "message": "Address updated successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    # പഴയ delete method അവിടെ തന്നെ ഉണ്ട്
     def delete(self, request, pk):
         address = self.get_object(pk, request.user)
         if not address:
