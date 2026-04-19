@@ -157,11 +157,16 @@ USE_TZ = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "http://127.0.0.1:5173 ",
+    "http://127.0.0.1:5173",              
     "https://foo-d-elivery.netlify.app",
-    "http://thecrunchindia.com",
-
+    "https://thecrunchindia.com",        
+    "https://www.thecrunchindia.com",   
 ]
+CSRF_TRUSTED_ORIGINS = [
+    "https://thecrunchindia.com",
+    "https://www.thecrunchindia.com",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 # Email Settings
