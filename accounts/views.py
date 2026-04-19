@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
-
+from django.utils import timezone
 from .models import PhoneOTP, Address
 from .serializers import (
     LoginSerializer, SendOTPSerializer, VerifyOTPSerializer, 
@@ -40,6 +40,8 @@ def set_jwt_cookies(response, user):
 # ============================================================================
 # 1. ADMIN & STAFF (Password Login)
 # ============================================================================
+
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -65,6 +67,17 @@ class CreateStaffView(APIView):
 # ============================================================================
 # 2. OTP FLOW: SIGNUP & LOGIN
 # ============================================================================
+def check_otp_cooldown(phone):
+    """60 സെക്കൻഡ് കഴിഞ്ഞോ എന്ന് നോക്കുന്നു. ഇല്ലെങ്കിൽ ബാക്കിയുള്ള സമയം തിരിച്ചു തരും."""
+    try:
+        otp_instance = PhoneOTP.objects.get(phone_number=phone)
+        time_diff = (timezone.now() - otp_instance.otp_created_at).total_seconds()
+        if time_diff < 60:
+            return int(60 - time_diff) 
+    except PhoneOTP.DoesNotExist:
+        pass
+    return 0
+
 class SignupRequestOTPView(APIView):
     permission_classes = [AllowAny]
 
@@ -79,34 +92,51 @@ class SignupRequestOTPView(APIView):
         if User.objects.filter(phone_number=phone).exists():
             return Response({"status": False, "message": "User already exists. Please Login."}, status=status.HTTP_400_BAD_REQUEST)
 
-        User.objects.create(
-            username=phone,
-            phone_number=phone,
-            first_name=name,
-            email=email,
-            is_active=False,
-            role="user"
-        )
+        # 🌟 NEW: Cooldown Check
+        cooldown = check_otp_cooldown(phone)
+        if cooldown > 0:
+            return Response({
+                "status": False,
+                "message": f"Please wait {cooldown} seconds before requesting a new OTP.",
+                "resend_delay": cooldown
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        User.objects.create(username=phone, phone_number=phone, first_name=name, email=email, is_active=False, role="user")
 
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
         send_sms_otp(phone, otp_instance.otp)
 
-        return Response({
-            "status": True, "message": "OTP sent!", "otp": otp_instance.otp 
-        }, status=status.HTTP_200_OK)
+        return Response({"status": True, "message": "OTP sent!", "otp": otp_instance.otp, "resend_delay": 60}, status=status.HTTP_200_OK)
+    
 
 class LoginRequestOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         phone = request.data.get("phone_number")
+
+        # 🌟 NEW: Cooldown Check (60 സെക്കൻഡ് കഴിഞ്ഞില്ലെങ്കിൽ ബ്ലോക്ക് ചെയ്യും)
+        cooldown = check_otp_cooldown(phone)
+        if cooldown > 0:
+            return Response({
+                "status": False,
+                "message": f"Please wait {cooldown} seconds before requesting a new OTP.",
+                "resend_delay": cooldown
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         try:
             user = User.objects.get(phone_number=phone)
             otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
             otp_instance.generate_otp()
             send_sms_otp(phone, otp_instance.otp)
-            return Response({"status": True, "message": "Login OTP sent!", "otp": otp_instance.otp}, status=status.HTTP_200_OK)
+            
+            return Response({
+                "status": True, 
+                "message": "Login OTP sent!", 
+                "otp": otp_instance.otp,
+                "resend_delay": 60
+            }, status=status.HTTP_200_OK)
         except User.DoesNotExist:
             return Response({"status": False, "message": "User not registered."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -117,10 +147,20 @@ class ResendOTPView(APIView):
         phone = request.data.get("phone_number")
         if not phone:
             return Response({"status": False, "message": "Phone number required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # 🌟 NEW: Cooldown Check
+        cooldown = check_otp_cooldown(phone)
+        if cooldown > 0:
+            return Response({
+                "status": False,
+                "message": f"Please wait {cooldown} seconds before requesting a new OTP.",
+                "resend_delay": cooldown
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
         send_sms_otp(phone, otp_instance.otp)
-        return Response({"status": True, "message": "OTP Resent!", "otp": otp_instance.otp}, status=status.HTTP_200_OK)
+        return Response({"status": True, "message": "OTP Resent!", "otp": otp_instance.otp, "resend_delay": 60}, status=status.HTTP_200_OK)
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -256,7 +296,6 @@ class AddressDetailView(APIView):
         except Address.DoesNotExist:
             return None
 
-    # 🌟 NEW: Address അപ്ഡേറ്റ് ചെയ്യാൻ വേണ്ടിയുള്ള PATCH method
     def patch(self, request, pk):
         address = self.get_object(pk, request.user)
         if not address:
@@ -268,7 +307,6 @@ class AddressDetailView(APIView):
             return Response({"status": True, "message": "Address updated successfully", "data": serializer.data}, status=status.HTTP_200_OK)
         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-    # പഴയ delete method അവിടെ തന്നെ ഉണ്ട്
     def delete(self, request, pk):
         address = self.get_object(pk, request.user)
         if not address:
