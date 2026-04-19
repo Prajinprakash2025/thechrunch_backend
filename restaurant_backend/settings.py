@@ -162,10 +162,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://thecrunchindia.com",        
     "https://www.thecrunchindia.com",   
 ]
-CSRF_TRUSTED_ORIGINS = [
-    "https://thecrunchindia.com",
-    "https://www.thecrunchindia.com",
-]
+
 
 CORS_ALLOW_CREDENTIALS = True
 
