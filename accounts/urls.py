@@ -10,7 +10,7 @@ from .views import (
     LogoutView,
     UserProfileView,
     AddressListCreateView,
-    AddressDetailView,CookieTokenRefreshView
+    AddressDetailView,CookieTokenRefreshView,
 )
 
 urlpatterns = [
