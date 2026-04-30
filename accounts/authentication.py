@@ -1,4 +1,5 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import RefreshToken
 
 class CookieJWTAuthentication(JWTAuthentication):
     def authenticate(self, request):
@@ -21,3 +22,11 @@ class CookieJWTAuthentication(JWTAuthentication):
             # 🌟 Token expired aayalo invalid aayalo error kanikkathe 
             # None thirichu vidum. Appol system login cheyyan anuvadhikkum.
             return None
+
+
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+    }

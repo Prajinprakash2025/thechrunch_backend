@@ -13,6 +13,8 @@ from .serializers import (
 )
 from .utils import send_sms_otp
 from .permissions import IsAdminOrStaff
+from .authentication import get_tokens_for_user
+from .utils import send_sms_otp
 
 User = get_user_model()
 
@@ -68,12 +70,11 @@ class CreateStaffView(APIView):
 # 2. OTP FLOW: SIGNUP & LOGIN
 # ============================================================================
 def check_otp_cooldown(phone):
-    """60 സെക്കൻഡ് കഴിഞ്ഞോ എന്ന് നോക്കുന്നു. ഇല്ലെങ്കിൽ ബാക്കിയുള്ള സമയം തിരിച്ചു തരും."""
     try:
         otp_instance = PhoneOTP.objects.get(phone_number=phone)
         time_diff = (timezone.now() - otp_instance.otp_created_at).total_seconds()
         if time_diff < 60:
-            return int(60 - time_diff) 
+            return int(60 - time_diff)
     except PhoneOTP.DoesNotExist:
         pass
     return 0
@@ -89,10 +90,14 @@ class SignupRequestOTPView(APIView):
         if not all([name, email, phone]):
             return Response({"status": False, "message": "Name, Email, and Phone are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if User.objects.filter(phone_number=phone).exists():
+        # Check if user exists
+        user = User.objects.filter(phone_number=phone).first()
+        
+        # 🟢 FIX 1: If user exists and IS VERIFIED, block them.
+        if user and user.is_active:
             return Response({"status": False, "message": "User already exists. Please Login."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 🌟 NEW: Cooldown Check
+        # 🌟 COOLDOWN CHECK
         cooldown = check_otp_cooldown(phone)
         if cooldown > 0:
             return Response({
@@ -101,13 +106,25 @@ class SignupRequestOTPView(APIView):
                 "resend_delay": cooldown
             }, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
-        User.objects.create(username=phone, phone_number=phone, first_name=name, email=email, is_active=False, role="user")
+        # 🟢 FIX 2: If user exists but is NOT VERIFIED (is_active=False), just update details instead of throwing error
+        if user and not user.is_active:
+            user.first_name = name
+            user.email = email
+            user.save()
+        else:
+            # Create a TEMPORARY/UNVERIFIED user
+            User.objects.create(username=phone, phone_number=phone, first_name=name, email=email, is_active=False, role="user")
 
+        # Generate and Send OTP
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
         send_sms_otp(phone, otp_instance.otp)
 
-        return Response({"status": True, "message": "OTP sent!", "otp": otp_instance.otp, "resend_delay": 60}, status=status.HTTP_200_OK)
+        return Response({
+            "status": True, 
+            "message": "OTP sent!", 
+            "resend_delay": 60
+        }, status=status.HTTP_200_OK)
     
 
 class LoginRequestOTPView(APIView):
@@ -115,8 +132,14 @@ class LoginRequestOTPView(APIView):
 
     def post(self, request):
         phone = request.data.get("phone_number")
+        
+        user = User.objects.filter(phone_number=phone).first()
 
-        # 🌟 NEW: Cooldown Check (60 സെക്കൻഡ് കഴിഞ്ഞില്ലെങ്കിൽ ബ്ലോക്ക് ചെയ്യും)
+        # 🟢 FIX 4: Prevent unverified users from logging in
+        if not user or not user.is_active:
+            return Response({"status": False, "message": "Account not found or not verified. Please Register first."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 🌟 COOLDOWN CHECK
         cooldown = check_otp_cooldown(phone)
         if cooldown > 0:
             return Response({
@@ -125,20 +148,17 @@ class LoginRequestOTPView(APIView):
                 "resend_delay": cooldown
             }, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
-        try:
-            user = User.objects.get(phone_number=phone)
-            otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
-            otp_instance.generate_otp()
-            send_sms_otp(phone, otp_instance.otp)
-            
-            return Response({
-                "status": True, 
-                "message": "Login OTP sent!", 
-                "otp": otp_instance.otp,
-                "resend_delay": 60
-            }, status=status.HTTP_200_OK)
-        except User.DoesNotExist:
-            return Response({"status": False, "message": "User not registered."}, status=status.HTTP_404_NOT_FOUND)
+        # Generate and Send OTP
+        otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
+        otp_instance.generate_otp()
+        send_sms_otp(phone, otp_instance.otp)
+        
+        return Response({
+            "status": True, 
+            "message": "Login OTP sent!", 
+            "resend_delay": 60
+        }, status=status.HTTP_200_OK)
+
 
 class ResendOTPView(APIView):
     permission_classes = [AllowAny]
@@ -169,20 +189,57 @@ class VerifyOTPView(APIView):
         phone = request.data.get("phone_number")
         otp = request.data.get("otp")
 
-        try:
-            otp_instance = PhoneOTP.objects.get(phone_number=phone, otp=otp)
-            user = User.objects.get(phone_number=phone)
-            
-            user.is_active = True
-            user.is_phone_verified = True
-            user.save()
-            
-            otp_instance.delete()
-            response = Response({"status": True, "message": "Login Successful", "name": user.first_name}, status=status.HTTP_200_OK)
-            return set_jwt_cookies(response, user)
-        except (PhoneOTP.DoesNotExist, User.DoesNotExist):
-            return Response({"status": False, "message": "Invalid OTP or Phone Number"}, status=status.HTTP_400_BAD_REQUEST)
+        if not phone or not otp:
+            return Response({"status": False, "message": "Phone number and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Verify OTP
+        try:
+            otp_instance = PhoneOTP.objects.get(phone_number=phone)
+            if otp_instance.otp != str(otp):
+                return Response({"status": False, "message": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        except PhoneOTP.DoesNotExist:
+            return Response({"status": False, "message": "OTP not found for this number"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Find the User
+        user = User.objects.filter(phone_number=phone).first()
+        if not user:
+            return Response({"status": False, "message": "User details not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 🟢 FIX 3: Activate account ONLY upon successful OTP verification
+        if not user.is_active:
+            user.is_active = True
+            user.save()
+
+        # Generate Tokens
+        tokens = get_tokens_for_user(user)
+
+        # Prepare Response
+        response = Response({
+            "status": True, 
+            "message": "Verification Successful", 
+            "name": user.first_name,
+            "role": user.role
+        }, status=status.HTTP_200_OK)
+
+        # Set Cookies (Important for Auth)
+        response.set_cookie(
+            key='access_token',
+            value=tokens['access'],
+            httponly=True,
+            samesite='None',
+            secure=True, 
+            max_age=15 * 60 # 15 minutes
+        )
+        response.set_cookie(
+            key='refresh_token',
+            value=tokens['refresh'],
+            httponly=True,
+            samesite='None',
+            secure=True,
+            max_age=7 * 24 * 60 * 60 # 7 days
+        )
+
+        return response
 # ============================================================================
 # 3. SESSION UTILITIES (Refresh & Logout)
 # ============================================================================
