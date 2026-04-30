@@ -122,7 +122,7 @@ class SignupRequestOTPView(APIView):
 
         return Response({
             "status": True, 
-            "message": "OTP sent!", 
+            "message": "f"Your OTP is {otp_instance.otp}"", 
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
     
@@ -155,7 +155,7 @@ class LoginRequestOTPView(APIView):
         
         return Response({
             "status": True, 
-            "message": "Login OTP sent!", 
+            "message": "f"Your OTP is {otp_instance.otp}"", 
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
 
@@ -168,7 +168,7 @@ class ResendOTPView(APIView):
         if not phone:
             return Response({"status": False, "message": "Phone number required"}, status=status.HTTP_400_BAD_REQUEST)
             
-        # 🌟 NEW: Cooldown Check
+        # 🌟 COOLDOWN CHECK
         cooldown = check_otp_cooldown(phone)
         if cooldown > 0:
             return Response({
@@ -177,11 +177,20 @@ class ResendOTPView(APIView):
                 "resend_delay": cooldown
             }, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
+        # Generate and Send OTP
         otp_instance, _ = PhoneOTP.objects.get_or_create(phone_number=phone)
         otp_instance.generate_otp()
         send_sms_otp(phone, otp_instance.otp)
-        return Response({"status": True, "message": "OTP Resent!", "otp": otp_instance.otp, "resend_delay": 60}, status=status.HTTP_200_OK)
+        
+        # 🌟 RETURN OTP IN RESPONSE (For Frontend Toast & Debugging)
+        return Response({
+            "status": True, 
+            "message": f"Your OTP is {otp_instance.otp}", 
+            "otp": otp_instance.otp, 
+            "resend_delay": 60
+        }, status=status.HTTP_200_OK)
 
+        
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
