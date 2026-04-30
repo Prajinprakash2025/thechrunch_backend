@@ -122,7 +122,7 @@ class SignupRequestOTPView(APIView):
 
         return Response({
             "status": True, 
-            "message": "f"Your OTP is {otp_instance.otp}"", 
+            "message": "f"Your OTP is {otp_instance.otp}", 
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
     
@@ -155,7 +155,7 @@ class LoginRequestOTPView(APIView):
         
         return Response({
             "status": True, 
-            "message": "f"Your OTP is {otp_instance.otp}"", 
+            "message": "f"Your OTP is {otp_instance.otp}", 
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
 
@@ -190,7 +190,7 @@ class ResendOTPView(APIView):
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
 
-        
+
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
