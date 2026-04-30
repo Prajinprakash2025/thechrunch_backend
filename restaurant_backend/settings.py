@@ -55,10 +55,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -163,6 +163,14 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.thecrunchindia.com",   
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://foo-d-elivery.netlify.app",
+    "https://thecrunchindia.com",
+    "https://www.thecrunchindia.com",
+]
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
 CORS_ALLOW_CREDENTIALS = True
 

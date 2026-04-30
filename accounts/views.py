@@ -122,7 +122,8 @@ class SignupRequestOTPView(APIView):
 
         return Response({
             "status": True, 
-            "message": f"Your OTP is {otp_instance.otp}", 
+            "message": "Signup OTP sent successfully!", 
+            "otp": otp_instance.otp,
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
     
@@ -155,7 +156,8 @@ class LoginRequestOTPView(APIView):
         
         return Response({
             "status": True, 
-            "message": f"Your OTP is {otp_instance.otp}", 
+            "message": "Login OTP sent successfully!", 
+            "otp": otp_instance.otp,
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
 
@@ -185,7 +187,7 @@ class ResendOTPView(APIView):
         # 🌟 RETURN OTP IN RESPONSE (For Frontend Toast & Debugging)
         return Response({
             "status": True, 
-            "message": f"Your OTP is {otp_instance.otp}", 
+            "message": "OTP Resent successfully!", 
             "otp": otp_instance.otp, 
             "resend_delay": 60
         }, status=status.HTTP_200_OK)
